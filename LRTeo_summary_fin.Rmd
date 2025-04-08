@@ -1,0 +1,2060 @@
+---
+title: "Summarizing Rare Allele Scan for LR and Teo"
+author: LFS
+output: html_notebook
+Date:   Dec-2020
+---
+
+Path to the data frames (binary format)
+```{r}
+path.df.LR = "G:/My Drive/Teo and landrace/Landrace/Rare_Allele_Scan/final_outputs/summarize/"
+path.df.Teo = "G:/My Drive/Teo and landrace/Teo/Rare Allele Scan/final_outputs/summarize/"
+
+library(dplyr)
+library(plyr)
+library(DataCombine)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+```
+#====================================================================================================
+# Sec. 1 (Two supp files)
+# - Supplementary File with the summary of all rare allele QTL detected both in maize LR as in teosinte
+# - Supplementary table of rare QTL per chromosome and trait both in maize LR as in teosinte
+#====================================================================================================
+```{r}
+# Landraces
+load(file = paste(path.df.LR, "Veg_Flo/", "qtl.keep.all_LR.RData", sep=""))
+qtl.keep.all_LR$Gr_Trait <- "Veg/Flo" 
+qtl.LR <- qtl.keep.all_LR
+
+load(file = paste(path.df.LR, "Env_Res/", "qtl.keep.all_LR.RData", sep=""))
+qtl.keep.all_LR$Gr_Trait <- "Env Resp"
+qtl.LR <- rbind(qtl.LR, qtl.keep.all_LR)
+
+load(file = paste(path.df.LR, "Rep/", "qtl.keep.all_LR.RData", sep=""))
+qtl.keep.all_LR$Gr_Trait <- "Reprod"
+qtl.LR <- rbind(qtl.LR, qtl.keep.all_LR)
+
+rm(qtl.keep.all_LR)
+qtl.LR <- qtl.LR[qtl.LR$marker != "All markers",]
+
+#detach("package:plyr", unload = TRUE)
+qtlxtrait_LR <- count(qtl.LR, Trait)   # Important: I need to unload the package "plyr" in order to get thes command line working
+qtlxtrait_LR <- qtlxtrait_LR %>% mutate(orden =1:n()) %>% select(orden, everything())  # create a new column "orden"
+qtl.LR2 <- merge(qtl.LR, qtlxtrait_LR[,-3], by = "Trait")                              # creating a new version of "qtl.LR" with the column "orden"
+qtl.LR2 <- qtl.LR2[with(qtl.LR2, order(orden, chrom, cM_start)),]                      # ordering by column "orden"
+
+# Getting total number of QTL per trait. Each DF corresponds to each trait. Each row corresponds to one QTL 
+traits = c('DTA', 'DTS', 'PLHT', 'LFLN', 'LFWD','TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL', 'EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW') 
+qtlxtrait_LR.list <- list()
+for (i in 1:length(traits)) {
+    qtlxtrait_LR.list[[i]] <- qtl.LR2[qtl.LR2$Trait == traits[i],]
+}
+
+# Counting the QTL per chromosome per trait. Each DF corresponds to each trait. Each row corresponds to one chromosome
+qtlxchr_LR.list <- list()
+for (i in 1:length(qtlxtrait_LR.list)) {
+    qtlxchr_LR.list[[i]] <- count(qtlxtrait_LR.list[[i]], chrom)
+}
+# Changing the name of the column "n" by the name of each trait
+for (i in 1:length(qtlxchr_LR.list)) {
+  names(qtlxchr_LR.list[[i]])[2] = paste(traits[i])
+}
+  
+qtlxchr_LR = Reduce(function(...) merge(..., by = "chrom", all = TRUE), qtlxchr_LR.list)
+
+qtlxchr_LR2 <- data.frame(t(qtlxchr_LR))                     # transposing
+names(qtlxchr_LR2)<- lapply(qtlxchr_LR2[1,], as.character)   # first row as colnames
+qtlxchr_LR2 <- qtlxchr_LR2[-1,]                              # removing first row
+library(data.table)
+setDT(qtlxchr_LR2, keep.rownames = TRUE)[]                   # rownames as first column
+names(qtlxchr_LR2)[1] <- "Trait"                             # renaming first column
+qtlxtraitxchr_LR2 <- merge(qtlxtrait_LR, qtlxchr_LR2, by = "Trait") 
+qtlxtraitxchr_LR2 <- qtlxtraitxchr_LR2[,c(2,1,3,4:13)]
+names(qtlxtraitxchr_LR2)[3] <- "Total"
+qtlxtraitxchr_LR2 <- qtlxtraitxchr_LR2[with(qtlxtraitxchr_LR2, order(orden)),] 
+
+
+# Teosinte
+
+load(file = paste(path.df.Teo, "Veg_Flo/", "qtl.keep.all_Teo.RData", sep=""))
+qtl.keep.all_Teo$Gr_Trait <- "Veg/Flo" 
+qtl.Teo <- qtl.keep.all_Teo
+
+load(file = paste(path.df.Teo, "Env_Res/", "qtl.keep.all_Teo.RData", sep=""))
+qtl.keep.all_Teo$Gr_Trait <- "Env Resp"
+qtl.Teo <- rbind(qtl.Teo, qtl.keep.all_Teo)
+
+load(file = paste(path.df.Teo, "Rep/", "qtl.keep.all_Teo.RData", sep=""))
+qtl.keep.all_Teo$Gr_Trait <- "Reprod"
+qtl.Teo <- rbind(qtl.Teo, qtl.keep.all_Teo)
+
+rm(qtl.keep.all_Teo)
+qtl.Teo <- qtl.Teo[qtl.Teo$marker != "All markers",]
+
+qtlxtrait_Teo <- count(qtl.Teo, Trait)
+qtlxtrait_Teo<- qtlxtrait_Teo %>% mutate(orden =1:n()) %>% select(orden, everything())  # create a new column "orden"
+qtl.Teo2 <- merge(qtl.Teo, qtlxtrait_Teo[,-3], by = "Trait")                            # creating a new version of "qtl.Teo" with the column "orden"
+qtl.Teo2 <- qtl.Teo2[with(qtl.Teo2, order(orden, chrom, cM_start)),]                    # ordering" by "orden"
+
+
+# Getting total number of QTL per trait. Each DF corresponds to each trait. Each row corresponds to one QTL 
+qtlxtrait_Teo.list <- list()
+for (i in 1:length(traits)) {
+    qtlxtrait_Teo.list[[i]] <- qtl.Teo2[qtl.Teo2$Trait == traits[i],]
+}
+# Counting the QTL per chromosome per trait. Each DF corresponds to each trait. Each row corresponds to one chromosome
+qtlxchr_Teo.list <- list()
+for (i in 1:length(qtlxtrait_Teo.list)) {
+    qtlxchr_Teo.list[[i]] <- count(qtlxtrait_Teo.list[[i]], chrom)
+}
+# Changing the name of the column with the counting of QTL in each chromosome
+for (i in 1:length(qtlxchr_Teo.list)) {
+  names(qtlxchr_Teo.list[[i]])[2] = paste(traits[i])
+}
+  
+qtlxchr_Teo = Reduce(function(...) merge(..., by = "chrom", all = TRUE), qtlxchr_Teo.list)
+
+qtlxchr_Teo2 <- data.frame(t(qtlxchr_Teo))                       # transposing
+names(qtlxchr_Teo2)<- lapply(qtlxchr_Teo2[1,], as.character)     # first row as colnames
+qtlxchr_Teo2 <- qtlxchr_Teo2[-1,]                                # removing first row
+library(data.table)
+setDT(qtlxchr_Teo2, keep.rownames = TRUE)[]                      # rownames as first column
+names(qtlxchr_Teo2)[1] <- "Trait"                                # renaming first column
+qtlxtraitxchr_Teo2 <- merge(qtlxtrait_Teo, qtlxchr_Teo2, by = "Trait")
+qtlxtraitxchr_Teo2 <- qtlxtraitxchr_Teo2[,c(2,1,3,4:13)]
+names(qtlxtraitxchr_Teo2)[3] <- "Total"
+qtlxtraitxchr_Teo2 <- qtlxtraitxchr_Teo2[with(qtlxtraitxchr_Teo2, order(orden)),]
+
+
+write.table(qtl.LR2, "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/qtl.LR2.txt", row.names = F, sep = "\t")    # It could be Supp Table in the paper
+write.table(qtlxchr_LR2, "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/qtl_x_trait_x_chr_LR2.txt", row.names = F, sep = "\t")
+
+write.table(qtl.Teo2, "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/qtl.Teo2.txt", row.names = F, sep = "\t")  # It could be Supp Table in the paper
+write.table(qtlxchr_Teo2, "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/qtl_x_trait_x_chr_Teo2.txt", row.names = F, sep = "\t")
+
+
+```
+#====================================================================================================
+ Sec. 2 Getting Rare QTL with possible pleiotropic effect into group traits
+#====================================================================================================
+```{r}
+# Landraces
+# All chromosomes in a loop
+chro_LR <- list()
+chr <- c(1:10)
+
+# important: before running this loop make sure "DataCombine" package is unloaded since it also has a function "shift" which is invoked instead of the "shift" function from "data.table" package
+#detach("package:DataCombine", unload = TRUE)
+for (i in 1:length(chr)) {
+  chro_LR[[paste("chr", i, sep = "")]] <- qtl.LR2[qtl.LR2$chrom == i,]
+  rownames(chro_LR[[i]]) <- NULL
+  chro_LR[[i]] <- chro_LR[[i]][with(chro_LR[[i]], order(cM, Parent)),]
+  chro_LR[[i]]$test1 = ifelse((chro_LR[[i]]$cM - shift(chro_LR[[i]]$cM)) < 5, 1, 0) 
+  chro_LR[[i]]$test2 = ifelse(chro_LR[[i]]$Parent == shift(chro_LR[[i]]$Parent), 1, 0)
+  chro_LR[[i]][1,33:34] = 1
+  chro_LR[[i]]$test3 = ifelse((chro_LR[[i]]$test1 + chro_LR[[i]]$test2) == 2, "Yes", "No")
+  chro_LR[[i]]$test4 = ifelse((shift(chro_LR[[i]]$test3, type = "lag") == "No" & chro_LR[[i]]$test3 == "No" & shift(chro_LR[[i]]$test3, type = "lead") == "No") | 
+                                 (shift(chro_LR[[i]]$test3, type = "lag") == "Yes" & chro_LR[[i]]$test3 == "No" & shift(chro_LR[[i]]$test3, type = "lead") == "No"), "Borrar", "Keep")
+  chro_LR[[i]][1,ncol(chro_LR[[i]])] = ifelse((chro_LR[[i]][1,5] == chro_LR[[i]][2,5]) & (chro_LR[[i]][2,7] - chro_LR[[i]][1,7]) < 5, "Keep", "Borrar")     # 1st row QTL
+  chro_LR[[i]][nrow(chro_LR[[i]]),ncol(chro_LR[[i]])] = ifelse(chro_LR[[i]][nrow(chro_LR[[i]]),(ncol(chro_LR[[i]])-1)] == "Yes", "Keep", "Borrar")          # last row QTL
+  chro_LR[[i]] <- chro_LR[[i]][chro_LR[[i]]$test4 == "Keep",]
+  chro_LR[[i]] <- chro_LR[[i]][with(chro_LR[[i]], order(cM, Parent)),]
+}
+
+qtl_plei_LR <- bind_rows(chro_LR)
+qtl_plei_LR <- qtl_plei_LR[,-c(33:36)]
+
+write.table(qtl_plei_LR, "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/Pleio_intergr_LR.csv", row.names = F, sep = ",")
+
+
+# Teosinte
+# All chromosomes in a loop
+chro_teo <- list()
+chr <- c(1:10)
+
+for (i in 1:length(chr)) {
+  chro_teo[[paste("chr", i, sep = "")]] <- qtl.Teo2[qtl.Teo2$chrom == i,]
+  chro_teo[[i]] <- chro_teo[[i]][with(chro_teo[[i]], order(cM, Parent)),]
+  chro_teo[[i]]$test1 = ifelse((chro_teo[[i]]$cM - shift(chro_teo[[i]]$cM)) < 5, 1, 0)
+  chro_teo[[i]]$test2 = ifelse(chro_teo[[i]]$Parent == shift(chro_teo[[i]]$Parent), 1, 0)
+  chro_teo[[i]][1,33:34] = 1
+  chro_teo[[i]]$test3 = ifelse((chro_teo[[i]]$test1 + chro_teo[[i]]$test2) == 2, "Yes", "No")
+  chro_teo[[i]]$test4 = ifelse((shift(chro_teo[[i]]$test3, type = "lag") == "No" & chro_teo[[i]]$test3 == "No" & shift(chro_teo[[i]]$test3, type = "lead") == "No") | 
+                                 (shift(chro_teo[[i]]$test3, type = "lag") == "Yes" & chro_teo[[i]]$test3 == "No" & shift(chro_teo[[i]]$test3, type = "lead") == "No"), "Borrar", "Keep")
+  chro_teo[[i]][1,ncol(chro_teo[[i]])] = ifelse((chro_teo[[i]][1,5] == chro_teo[[i]][2,5]) & (chro_teo[[i]][2,7] - chro_teo[[i]][1,7]) < 5, "Keep", "Borrar")
+  chro_teo[[i]][nrow(chro_teo[[i]]),ncol(chro_teo[[i]])] = ifelse(chro_teo[[i]][nrow(chro_teo[[i]]),(ncol(chro_teo[[i]])-1)] == "Yes", "Keep", "Borrar")
+  chro_teo[[i]] <- chro_teo[[i]][chro_teo[[i]]$test4 == "Keep",]
+  chro_teo[[i]] <- chro_teo[[i]][with(chro_teo[[i]], order(cM, Parent)),]
+}
+
+qtl_plei_Teo <- bind_rows(chro_teo)
+qtl_plei_Teo <- qtl_plei_Teo[,-c(33:36)]
+
+write.table(qtl_plei_Teo, "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/Pleio_intergr_Teo.csv", row.names = F, sep = ",")
+```
+
+#====================================================================================================
+ Sec. 3 Number of rare allele QTL vs Num. offspring per parent for LR and Teo for all traits
+#====================================================================================================
+```{r}
+load(file = paste(path.df.LR, "QTL_kid_counts_LR.RData", sep=""))   
+load(file = paste(path.df.Teo, "QTL_kid_counts_Teo.RData", sep=""))
+
+QTL_kid_counts_Teo$specie <- "Teosinte"
+QTL_kid_counts_LR$specie <- "Maize"
+
+# correlations
+cor.test(QTL_kid_counts_LR$N_offspring, QTL_kid_counts_LR$N_QTL, method = "pearson", conf.level = 0.95)
+cor.test(QTL_kid_counts_Teo$N_offspring, QTL_kid_counts_Teo$N_QTL, method = "pearson", conf.level = 0.95)
+
+mean_m <- QTL_kid_counts_LR %>% summarise_if(is.numeric, mean, na.rm = TRUE)
+mean_m[,c("specie", "cor")] <- c("Maize", "Corr = 0.38 \nP = 0.04")
+mean_t <- QTL_kid_counts_Teo %>% summarise_if(is.numeric, mean, na.rm = TRUE)
+mean_t[,c("specie", "cor")] <- c("Teosinte", "Corr = 0.45 \nP = 8.3e-4")
+mean_mt <- rbind(mean_m, mean_t)
+mean_mt <- mean_mt[,c(5,3,4,6)]
+rm(mean_m, mean_t)
+
+QTL_kids <- rbind(QTL_kid_counts_LR, QTL_kid_counts_Teo)
+str(QTL_kid_counts_LR)
+
+library(ggplot2)
+QTL_kid_plot = ggplot(QTL_kids, aes(x = N_offspring, y = N_QTL)) + geom_point(size = 3.2, color = 'blue', alpha = 0.3) +
+   geom_text(data = mean_mt, aes(x = 480, y = 21, label = cor), size = 4) +
+  facet_wrap(.~ specie, nrow = 1) + geom_point(data = mean_mt, size = 5, color = "firebrick", alpha = 0.4) +
+  ggtitle("Number of rare allele QTL vs Num. offspring per parent \nin Maize and Teosinte") +
+  ylab("Number of rare allele QTL") +
+  xlab("Number of offspring (selfs count 2x)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14), 
+        axis.text.y = element_text(size = 14), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold"),
+        strip.text = element_text(size = 12, face="bold"))
+
+QTL_kid_plot
+
+#path.graph.com <- "G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/"
+#ggsave(QTL_kid_plot, filename = paste0(path.graph.com, "Num_Rare_QTL_vs_Nom_Offpr_TeoLR.png"), width = 10, height = 6)
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/Num_Rare_QTL_vs_Nom_Offpr_TeoLR.png", height = 600, width = 1200, res = 150)
+QTL_kid_plot
+dev.off()
+```
+#====================================================================================================
+ Sec. 4 Additive effect vs Dominance effect Graph combined for LR and Teo - 18 traits (Standarized by Phenotypic Standard Deviation)
+#====================================================================================================
+Step 1. Getting Std Effects for Maize
+
+```{r}
+# Importing the file that contains the phenotypic variance (Vp) of each trait. Then get the sqrt of each one Vp
+varp <- read.table("G:/My Drive/Backup_Dell_Precision_T3600_1/LANDRACES_2/VarComp_Est/varp.txt", header = T, sep = "\t")
+names(varp)[1] = "Trait"
+varp <- varp[-7,]
+
+# Recoding trait ID
+varp$Trait <- recode(varp$Trait, "PltHt"="PLHT", "LfLen"="LFLN", "LfWth"="LFWD")
+varp$Trait <- recode(varp$Trait, 'TillN'='TILN', 'pEarN'='PROL', 'HkLfN'='LBNN', 'ShkLen'='LBLN', 'ShkIntLen'='LBIL')
+varp$Trait <- recode(varp$Trait, 'CobLen'='EL', 'K1rowN'='CUPR', 'CobDia'='ED', 'pKN'='GE', 'EarInternodeLen'='EILN', 'tKN'='TGPP', 'tKW'='TGWP')
+row.names(varp) <- NULL
+varp[17,1] = "GW"
+varp[17,2] = 8026.80
+
+varp$sqrtVp <- sqrt(varp[,2])
+
+
+# Importing QTL effect data for maize
+load(file = paste(path.df.LR, "Veg_Flo/", "qtl.keep.all_LR.RData", sep=""))
+qtl.keep.all_LR$Gr_Trait <- "Veg/Flo" 
+qtl.LR <- qtl.keep.all_LR
+
+load(file = paste(path.df.LR, "Env_Res/", "qtl.keep.all_LR.RData", sep=""))
+qtl.keep.all_LR$Gr_Trait <- "Env Resp"
+qtl.LR <- rbind(qtl.LR, qtl.keep.all_LR)
+
+load(file = paste(path.df.LR, "Rep/", "qtl.keep.all_LR.RData", sep=""))
+qtl.keep.all_LR$Gr_Trait <- "Reprod"
+qtl.LR <- rbind(qtl.LR, qtl.keep.all_LR)
+
+rm(qtl.keep.all_LR)
+qtl.LR <- qtl.LR[qtl.LR$marker != "All markers",]
+qtl.LR2 <- qtl.LR[,c(1,15,12,23,26,31)]
+
+qtl.LR2 <- merge(qtl.LR2, varp[,-2], by = "Trait")
+
+qtl.LR2$std_aEff <- qtl.LR2$a_effect / qtl.LR2$sqrtVp
+qtl.LR2$std_dEff <- qtl.LR2$d_effect / qtl.LR2$sqrtVp
+qtl.LR2$specie <- "Maize"
+
+```
+Step 2, Getting Std Effects for Teosinte
+
+```{r}
+# Importing the file that contains the phenotypic variances (Vp) of each trait. Then get the sqrt of each one Vp
+varpt <- read.table("G:/My Drive/Teo and landrace/CJ paper/varcomp.csv", header = T, sep = ",")
+varpt <- varpt[varpt$Pop == "Teosinte", c(1,8)]
+
+varpt$sqrtVp <- sqrt(varpt[,2])
+
+# Importing QTL effect data for teosinte
+load(file = paste(path.df.Teo, "Veg_Flo/", "qtl.keep.all_Teo.RData", sep=""))
+qtl.keep.all_Teo$Gr_Trait <- "Veg/Flo" 
+qtl.Teo <- qtl.keep.all_Teo
+
+load(file = paste(path.df.Teo, "Env_Res/", "qtl.keep.all_Teo.RData", sep=""))
+qtl.keep.all_Teo$Gr_Trait <- "Env Resp"
+qtl.Teo <- rbind(qtl.Teo, qtl.keep.all_Teo)
+
+load(file = paste(path.df.Teo, "Rep/", "qtl.keep.all_Teo.RData", sep=""))
+qtl.keep.all_Teo$Gr_Trait <- "Reprod"
+qtl.Teo <- rbind(qtl.Teo, qtl.keep.all_Teo)
+
+rm(qtl.keep.all_Teo)
+qtl.Teo <- qtl.Teo[qtl.Teo$marker != "All markers",]
+qtl.Teo2 <- qtl.Teo[,c(1,15,12,23,26,31)]
+
+qtl.Teo2 <- merge(qtl.Teo2, varpt[,-2], by = "Trait")
+
+qtl.Teo2$std_aEff <- qtl.Teo2$a_effect / qtl.Teo2$sqrtVp
+qtl.Teo2$std_dEff <- qtl.Teo2$d_effect / qtl.Teo2$sqrtVp
+qtl.Teo2$specie <- "Teosinte"
+
+qtl.LRTeo <- rbind(qtl.LR2, qtl.Teo2)
+
+# Checking correlations between A and D effect in each trait category
+Mai_Veg <- qtl.LRTeo[qtl.LRTeo$specie == "Maize" & qtl.LRTeo$Gr_Trait == "Veg/Flo",]   
+Mai_Env <- qtl.LRTeo[qtl.LRTeo$specie == "Maize" & qtl.LRTeo$Gr_Trait == "Env Resp",]
+Mai_Rep <- qtl.LRTeo[qtl.LRTeo$specie == "Maize" & qtl.LRTeo$Gr_Trait == "Reprod",]
+
+cor.test(Mai_Veg$std_aEff, Mai_Veg$std_dEff, method = "pearson", conf.level = 0.95)
+cor.test(Mai_Env$std_aEff, Mai_Env$std_dEff, method = "pearson", conf.level = 0.95)
+cor.test(Mai_Rep$std_aEff, Mai_Rep$std_dEff, method = "pearson", conf.level = 0.95)
+
+Teo_Veg <- qtl.LRTeo[qtl.LRTeo$specie == "Teosinte" & qtl.LRTeo$Gr_Trait == "Veg/Flo",]   
+Teo_Env <- qtl.LRTeo[qtl.LRTeo$specie == "Teosinte" & qtl.LRTeo$Gr_Trait == "Env Resp",]
+Teo_Rep <- qtl.LRTeo[qtl.LRTeo$specie == "Teosinte" & qtl.LRTeo$Gr_Trait == "Reprod",]
+
+cor.test(Teo_Veg$std_aEff, Teo_Veg$std_dEff, method = "pearson", conf.level = 0.95)
+cor.test(Teo_Env$std_aEff, Teo_Env$std_dEff, method = "pearson", conf.level = 0.95)
+cor.test(Teo_Rep$std_aEff, Teo_Rep$std_dEff, method = "pearson", conf.level = 0.95)
+
+```
+Step 3, Getting the graph
+
+```{r}
+# Option 1. Facet by group of traits
+std.scatter = ggplot(qtl.LRTeo, aes(x = std_aEff, y = std_dEff)) + 
+  geom_point(aes(colour = Gr_Trait))+ facet_wrap(Gr_Trait ~ specie, nrow = 2) +
+  ylab("Std dominance effect") +
+  xlab("Std additive effect") +
+  ggtitle("Std Dominance vs Additive effects Maize and Teosinte") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14), legend.position = "none") 
+
+std.scatter
+
+
+# Option 2. Two facet graphs (Maize and Teo) and combine 18 traits in each graph
+std.scatter2 = ggplot(qtl.LRTeo, aes(x = std_aEff, y = std_dEff)) + 
+  geom_point(aes(colour = Gr_Trait), alpha = 0.5)+ facet_wrap(. ~ specie, nrow = 1) + 
+  geom_hline(yintercept = 0, linetype="dashed", color = "gray") + 
+  geom_vline(xintercept = 0, linetype="dashed", color = "gray") + scale_color_brewer(palette = "Set2") +
+  ylab("Std dominance effect") +
+  xlab("Std additive effect") +
+  ggtitle("Std Dominance vs Additive effects Maize and Teosinte") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 14),
+        legend.position = "bottom",
+        panel.grid = element_blank()) 
+
+std.scatter2
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/Std_A_vs_D_effects.png", height = 600, width = 1200, res = 200)
+std.scatter2
+dev.off()
+
+
+
+
+
+```
+#==========================================================================================================
+ Sec. 5 Bar chart in facet showing the variation due to rare QTL for LR and Teo - Environmental Response
+#==========================================================================================================
+Vegetative/Flowering Time Traits
+
+```{r}
+# Loading "QTL.summary3_LR.RData" for Vegetative/Flowering Time Traits
+load(file = paste(path.df.LR, "Veg_Flo/", "QTL.summary3_LR.RData", sep=""))
+load(file = paste(path.df.Teo, "Veg_Flo/", "QTL.summary3_Teo.RData", sep=""))
+
+QTL.summary3_Teo$specie <- "Teosinte"
+QTL.summary3_LR$specie <- "Maize"
+
+QTL.summary3_com <- rbind(QTL.summary3_LR, QTL.summary3_Teo)
+
+QTL.summary.bar = ggplot(QTL.summary3_com, aes(x = Model, y = R2)) +
+  geom_bar(stat = 'identity', aes(fill = Trait), width = 0.5, position = position_dodge(width = 1)) +
+  facet_grid(facets = Trait ~ specie) +
+  geom_text(aes(x = 'Add QTL', y = 0.4, label = paste(QTL_in_final_mod, "QTL")), size = 3) +
+  scale_y_continuous(breaks=c(0.25, 0.5)) +
+  guides(fill = FALSE) +
+  xlab("Model Component") +
+  ylab(expression(R^{2})) +
+  ggtitle("Variation due to rare QTL in Maize and Teosinte in Vegetative\n/Flowering Traits") +
+  theme_bw() +
+  theme(#panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.y = element_text(size = 6), 
+        plot.title = element_text(size = 10),
+        aspect.ratio=1/3,
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        panel.spacing.x=unit(0, "lines"),panel.spacing.y=unit(0, "lines")
+        )
+
+QTL.summary.bar
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL variation bar graph LR-Teo Veg-Flo.png", height = 800, width = 1600, res = 150)
+QTL.summary.bar
+dev.off()
+
+```
+Environmental Response Traits
+
+```{r}
+# Loading "QTL.summary3_LR.RData" for Environmental Response Traits
+load(file = paste(path.df.LR, "Env_Res/", "QTL.summary3_LR.RData", sep=""))
+load(file = paste(path.df.Teo, "Env_Res/", "QTL.summary3_Teo.RData", sep=""))
+
+QTL.summary3_Teo$specie <- "Teosinte"
+QTL.summary3_LR$specie <- "Maize"
+
+QTL.summary3_com <- rbind(QTL.summary3_LR, QTL.summary3_Teo)
+
+QTL.summary.bar = ggplot(QTL.summary3_com, aes(x = Model, y = R2)) +
+  geom_bar(stat = 'identity', aes(fill = Trait), width = 0.5, position = position_dodge(width = 1)) +
+  facet_grid(facets = Trait ~ specie) +
+  geom_text(aes(x = 'Add QTL', y = 0.4, label = paste(QTL_in_final_mod, "QTL")), size = 3) +
+  scale_y_continuous(breaks=c(0.25, 0.5), limits = c(0, 0.6)) + 
+  guides(fill = FALSE) +
+  xlab("Model Component") +
+  ylab(expression(R^{2})) +
+  ggtitle("Variation due to rare QTL in Maize and Teosinte \nEnviromental Response Traits") +
+  theme_bw() +
+  theme(#panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.y = element_text(size = 6), 
+        plot.title = element_text(size = 10),
+        aspect.ratio=1/3,
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        panel.spacing.x=unit(0, "lines"),panel.spacing.y=unit(0, "lines")
+        )
+
+QTL.summary.bar
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL variation bar graph LR-Teo Env_Res.png", height = 800, width = 1600, res = 150)
+QTL.summary.bar
+dev.off()
+```
+Reproductive Traits
+
+```{r}
+# Loading "QTL.summary3_LR.RData" for Reproductive Traits
+load(file = paste(path.df.LR, "Rep/", "QTL.summary3_LR.RData", sep=""))
+load(file = paste(path.df.Teo, "Rep/", "QTL.summary3_Teo.RData", sep=""))
+
+QTL.summary3_Teo$specie <- "Teosinte"
+QTL.summary3_LR$specie <- "Maize"
+
+QTL.summary3_com <- rbind(QTL.summary3_LR, QTL.summary3_Teo)
+
+QTL.summary.bar = ggplot(QTL.summary3_com, aes(x = Model, y = R2)) +
+  geom_bar(stat = 'identity', aes(fill = Trait), width = 0.5, position = position_dodge(width = 1)) +
+  facet_grid(facets = Trait ~ specie) +
+  geom_text(aes(x = 'Add QTL', y = 0.4, label = paste(QTL_in_final_mod, "QTL")), size = 3) +
+  scale_y_continuous(breaks=c(0.25, 0.5)) +
+  guides(fill = FALSE) +
+  xlab("Model Component") +
+  ylab(expression(R^{2})) +
+  ggtitle("Variation due to rare QTL in teosinte Reproductive Traits") +
+  theme_bw() +
+  theme(#panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.y = element_text(size = 6), 
+        plot.title = element_text(size = 10),
+        aspect.ratio=1/3,
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        panel.spacing.x=unit(0, "lines"),panel.spacing.y=unit(0, "lines")
+        )
+
+QTL.summary.bar
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL variation bar graph LR-Teo Reprod.png", height = 800, width = 1600, res = 150)
+QTL.summary.bar
+dev.off()
+```
+#===============================================================================================================================
+ Sec. 6
+ Plotting A and D effects against genomic positions, using same layout as before for LOD scores. To do this, set up the X axis 
+ using the map data, so we have complete chromosome positions to plot the QTL info on.
+#===============================================================================================================================
+Getting Plot for Landraces
+
+```{r}
+##########1 Getting Phenotypic Variances for Landraces  1##########
+# Importing the file that contains the phenotypic variance (Vp) of each trait. Then get the sqrt of each one Vp
+varp <- read.table("G:/My Drive/Backup_Dell_Precision_T3600_1/LANDRACES_2/VarComp_Est/varp.txt", header = T, sep = "\t")
+names(varp)[1] = "Trait"
+varp <- varp[-7,]
+
+# Recoding trait ID
+varp$Trait <- recode(varp$Trait, "PltHt"="PLHT", "LfLen"="LFLN", "LfWth"="LFWD")
+varp$Trait <- recode(varp$Trait, 'TillN'='TILN', 'pEarN'='PROL', 'HkLfN'='LBNN', 'ShkLen'='LBLN', 'ShkIntLen'='LBIL')
+varp$Trait <- recode(varp$Trait, 'CobLen'='EL', 'K1rowN'='CUPR', 'CobDia'='ED', 'pKN'='GE', 'EarInternodeLen'='EILN', 'tKN'='TGPP', 'tKW'='TGWP')
+row.names(varp) <- NULL
+varp[17,1] = "GW"
+varp[17,2] = 8026.80
+
+varp$sqrtVp <- sqrt(varp[,2])
+
+##########1 Loading QTL effect data for Landraces  1##########
+
+load(file = paste(path.df.LR, "Veg_Flo/", "qtl.ad2_LR.RData", sep=""))
+qtl.ad2_LR$Gr_Trait <- "Veg/Flo" 
+qtl.ad2_LR <- qtl.ad2_LR[with(qtl.ad2_LR, order(Trait, chrom, cM)),]
+row.names(qtl.ad2_LR) <- NULL
+#qtl.ad_LR <- qtl.ad2_LR[-c(35:36, 59:60, 76:77, 114:115, 121:122, 130:131, 151:152),] # I used this before when I had duplicated QTL
+qtl.ad_LR <- qtl.ad2_LR
+
+load(file = paste(path.df.LR, "Env_Res/", "qtl.ad2_LR.RData", sep=""))
+qtl.ad2_LR$Gr_Trait <- "Env Resp"
+qtl.ad2_LR <- qtl.ad2_LR[with(qtl.ad2_LR, order(Trait, chrom, cM)),]
+row.names(qtl.ad2_LR) <- NULL
+#qtl.ad_LR <- rbind(qtl.ad_LR, qtl.ad2_LR[-c(9:10, 39:40, 63:64, 103:104),]) # I used this before when I had duplicated QTL
+qtl.ad_LR <- rbind(qtl.ad_LR, qtl.ad2_LR)
+
+load(file = paste(path.df.LR, "Rep/", "qtl.ad2_LR.RData", sep=""))
+qtl.ad2_LR$Gr_Trait <- "Reprod"
+qtl.ad2_LR <- qtl.ad2_LR[with(qtl.ad2_LR, order(Trait, chrom, cM)),]
+row.names(qtl.ad2_LR) <- NULL
+#qtl.ad_LR <- rbind(qtl.ad_LR, qtl.ad2_LR[-c(27:28, 44:45, 49:50, 73:74, 84:85, 95:96, 106:107),]) # I used this before when I had duplicated QTL
+qtl.ad_LR <- rbind(qtl.ad_LR, qtl.ad2_LR)
+rm(qtl.ad2_LR)
+
+# It will be used later to get the favorable and unfavorable alleles 
+# The columns I am selecting here are ("chrom", "SNP", "cM", "Trait", "Parent", "parameter", "value", "Gr_Trait")
+qtl.LR_ad <- qtl.ad_LR[,c(1,2,4,5,8,11,12,15)] # Note: in this analysis (output_NEW3), the order of the columns is like in the first analysis (output). That is, column 7 corresponds to the column "Parent" (see R notebook LRTeo_sumary.Rmd).
+
+qtl.ad_LR <- qtl.ad_LR[,c(1,2,4,5,11,12,15)]
+qtl.ad_LR <- merge(qtl.ad_LR, varp[,-2], by = "Trait")
+qtl.ad_LR$value <- as.numeric(qtl.ad_LR$value)
+qtl.ad_LR$std_Val <- qtl.ad_LR$value / qtl.ad_LR$sqrtVp
+qtl.ad_LR <- qtl.ad_LR[with(qtl.ad_LR, order(Gr_Trait, Trait, chrom)),]
+qtl.ad_LR$Gr_Trait <- factor(qtl.ad_LR$Gr_Trait, levels = c("Veg/Flo", "Env Resp", "Reprod"))
+
+##########1 Creating the plot for Landraces  1########## 
+
+effect.plot = ggplot(qtl.ad_LR, aes(x = cM, y = std_Val)) +
+  geom_point(data = qtl.ad_LR, aes(colour = parameter), alpha = 0.5, size = 2.1) + 
+  facet_grid(facets = Gr_Trait ~ chrom, scales = "free", space = 'free_x') +
+  #guides(colour=FALSE) +
+  geom_hline(yintercept = 0, size = 0.35,  linetype="dashed", color = 'gray57') + 
+  theme_bw() +
+  ylab("Std Effect Estimate") +
+  xlab("cM") +
+  ggtitle("Maize rare allele QTL additive and dominance effects") +
+  scale_x_continuous(breaks=c(50,150)) + scale_color_manual(values = c("darkolivegreen4", "darkorange2")) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 9)) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines")) +
+  theme(axis.text.x = element_text(size = 8), 
+        axis.text.y = element_text(size = 8), 
+        axis.title = element_text(size=8), 
+        plot.title = element_text(size = 12, face = "bold"),
+        legend.position = "bottom", 
+        legend.text = element_text(size = 12), legend.title = element_text(size = 13))
+
+effect.plot
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL_stdA_&_stdD_effe_Maize.png", height = 600, width = 1200, res = 180)
+effect.plot
+dev.off()
+
+```
+Creating plot for Teosinte
+
+```{r}
+##########2 Getting Phenotypic Variances for Teosinte  2##########
+
+# Importing the file that contains the phenotypic variances (Vp) of each trait. Then get the sqrt of each one Vp
+varpt <- read.table("G:/My Drive/Teo and landrace/CJ paper/varcomp.csv", header = T, sep = ",")
+varpt <- varpt[varpt$Pop == "Teosinte", c(1,8)]
+
+varpt$sqrtVp <- sqrt(varpt[,2])
+
+
+##########2 Loading QTL effect data for Teosinte  2##########
+
+load(file = paste(path.df.Teo, "Veg_Flo/", "qtl.ad2_Teo.RData", sep=""))
+qtl.ad2_Teo$Gr_Trait <- "Veg/Flo" 
+qtl.ad2_Teo <- qtl.ad2_Teo[with(qtl.ad2_Teo, order(Trait, chrom, cM)),]
+row.names(qtl.ad2_Teo) <- NULL
+#qtl.ad_Teo <- qtl.ad2_Teo[-c(190:191, 212:213, 232:233),] # I used this before when I had duplicated QTL
+qtl.ad_Teo <- qtl.ad2_Teo
+
+load(file = paste(path.df.Teo, "Env_Res/", "qtl.ad2_Teo.RData", sep=""))
+qtl.ad2_Teo$Gr_Trait <- "Env Resp"
+qtl.ad2_Teo <- qtl.ad2_Teo[with(qtl.ad2_Teo, order(Trait, chrom, cM)),]
+row.names(qtl.ad2_Teo) <- NULL
+#qtl.ad_Teo <- rbind(qtl.ad_Teo, qtl.ad2_Teo[-c(97:98),]) # I used this before when I had duplicated QTL
+qtl.ad_Teo <- rbind(qtl.ad_Teo, qtl.ad2_Teo)
+
+load(file = paste(path.df.Teo, "Rep/", "qtl.ad2_Teo.RData", sep=""))
+qtl.ad2_Teo$Gr_Trait <- "Reprod"
+qtl.ad2_Teo <- qtl.ad2_Teo[with(qtl.ad2_Teo, order(Trait, chrom, cM)),]
+row.names(qtl.ad2_Teo) <- NULL
+#qtl.ad_Teo <- rbind(qtl.ad_Teo, qtl.ad2_Teo[-c(343:344, 403:404, 418:419, 431:432),]) # I used this before when I had duplicated QTL
+qtl.ad_Teo <- rbind(qtl.ad_Teo, qtl.ad2_Teo)
+rm(qtl.ad2_Teo)
+
+# it will be used later to get the favorable and unfavorable alleles
+# The columns I am selecting here are ("chrom", "SNP", "cM", "Trait", "Parent", "parameter", "value", "Gr_Trait")
+qtl.Teo_ad <- qtl.ad_Teo[,c(1,2,4,5,7,8,11,12,17)] # Note: in this analysis (output_NEW3), the order of the columns is like in the first analysis (output). That is, column 7 corresponds to the column "Parent" (see R notebook LRTeo_sumary.Rmd).
+
+qtl.ad_Teo <- qtl.ad_Teo[,c(1,2,4,5,11,12,17)]
+qtl.ad_Teo <- merge(qtl.ad_Teo, varpt[,-2], by = "Trait")
+qtl.ad_Teo$value <- as.numeric(qtl.ad_Teo$value)
+qtl.ad_Teo$std_Val <- qtl.ad_Teo$value / qtl.ad_Teo$sqrtVp
+qtl.ad_Teo <- qtl.ad_Teo[with(qtl.ad_Teo, order(Gr_Trait, Trait, chrom)),]
+qtl.ad_Teo$Gr_Trait <- factor(qtl.ad_Teo$Gr_Trait, levels = c("Veg/Flo", "Env Resp", "Reprod"))
+
+##########2 Creating the plot for Teosinte  2########## 
+
+effect.plot = ggplot(qtl.ad_Teo, aes(x = cM, y = std_Val)) +
+  geom_point(data = qtl.ad_Teo, aes(colour = parameter), alpha = 0.5, size = 2.1) + 
+  facet_grid(facets = Gr_Trait ~ chrom, scales = "free", space = 'free_x') +
+  #guides(colour=FALSE) +
+  geom_hline(yintercept = 0, size = 0.35,  linetype="dashed", color = 'gray57') + 
+  theme_bw() +
+  ylab("Std Effect Estimate") +
+  xlab("cM") +
+  ggtitle("Teosinte rare allele QTL additive and dominance effects") +
+  scale_x_continuous(breaks=c(50,150)) + scale_color_manual(values = c("dodgerblue2", "gold3")) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10)) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines")) +
+  theme(axis.text.x = element_text(size = 10), 
+        axis.text.y = element_text(size = 10), 
+        axis.title = element_text(size=8), 
+        plot.title = element_text(size = 12, face = "bold"),
+        legend.position = "bottom", 
+        legend.text = element_text(size = 12), legend.title = element_text(size = 13))
+
+effect.plot
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL_stdA_&_stdD_effe_Teosinte.png", height = 600, width = 1200, res = 180) 
+effect.plot
+dev.off()
+```
+#==========================================================================================================
+ Sec. 7 Creating a density plot of D/A effects
+#==========================================================================================================
+```{r}
+#dddddddddddddddddddddddd> Maize <dddddddddddddddddddddddd 
+qtl.Std.ad_LR <- merge(qtl.LR_ad, varp[,-2], by = "Trait")
+qtl.Std.ad_LR$value <- as.numeric(qtl.Std.ad_LR$value)
+qtl.Std.ad_LR$std_Val <- abs(qtl.Std.ad_LR$value) / qtl.Std.ad_LR$sqrtVp   # Use absolute values of the effects
+qtl.Std.ad_LR <- qtl.Std.ad_LR[with(qtl.Std.ad_LR, order(Gr_Trait, Trait, chrom)),]
+qtl.ad_LR$Gr_Trait <- factor(qtl.ad_LR$Gr_Trait, levels = c("Veg/Flo", "Env Resp", "Reprod"))
+
+temp <- merge(qtl.LR_ad, varp[,-2], by = "Trait")
+temp$value <- as.numeric(temp$value)
+temp$std_Val <- temp$value / temp$sqrtVp
+temp <- temp[with(temp, order(Gr_Trait, Trait, chrom)),] 
+temp2 <- temp[,-c(7,9)]
+temp2 <- pivot_wider(temp2, names_from = parameter, values_from = std_Val) 
+names(temp2)[c(7,8)] = c("std_A_eff", "std_D_eff")
+temp2$D.A <- temp2$std_D_eff / temp2$std_A_eff
+temp2$specie <- "Maize"
+str(temp2)
+
+LR.wide.St.D_A <- qtl.Std.ad_LR[,-c(7,9)]
+LR.wide.St.D_A <- pivot_wider(LR.wide.St.D_A, names_from = parameter, values_from = std_Val) # changing the data frame "LR.wide.St.D_A" from longer
+names(LR.wide.St.D_A)[c(7,8)] = c("std_A_eff", "std_D_eff")
+make.names("D/A")
+LR.wide.St.D_A$D.A <- LR.wide.St.D_A$std_D_eff / LR.wide.St.D_A$std_A_eff
+str(LR.wide.St.D_A)
+LR.wide.St.D_A$specie <- "Maize"
+range(LR.wide.St.D_A$D.A)
+
+ggplot(LR.wide.St.D_A, aes(x=D.A)) + geom_density(color="darkblue", fill="lightblue")
+ggplot(temp2, aes(x=D.A)) + geom_density(color="darkblue", fill="lightblue")
+```
+
+```{r}
+#dddddddddddddddddddddddd> Teosinte <dddddddddddddddddddddddd
+qtl.Std.ad_Teo <- merge(qtl.Teo_ad, varpt[,-2], by = "Trait")
+qtl.Std.ad_Teo$value <- as.numeric(qtl.Std.ad_Teo$value)
+qtl.Std.ad_Teo$std_Val <- abs(qtl.Std.ad_Teo$value) / qtl.Std.ad_Teo$sqrtVp   # Use absolute values of the effects
+qtl.Std.ad_Teo <- qtl.Std.ad_Teo[with(qtl.Std.ad_Teo, order(Gr_Trait, Trait, chrom, Parent, parameter)),]
+
+temp3 <- merge(qtl.Teo_ad, varpt[,-2], by = "Trait")
+temp3$value <- as.numeric(temp3$value)
+temp3$std_Val <- temp3$value / temp3$sqrtVp
+temp3 <- temp3[with(temp3, order(Gr_Trait, Trait, chrom, Parent, parameter)),] 
+temp4 <- temp3[,-c(8,10)] # the removed columns are "value" and "sqrtVp"
+temp4 <- pivot_wider(temp4, names_from = parameter, values_from = std_Val) 
+names(temp4)[c(8,9)] = c("std_A_eff", "std_D_eff") 
+temp4$D.A <- temp4$std_D_eff / temp4$std_A_eff
+temp4$specie <- "Teosinte"
+
+Teo.wide.St.D_A <- qtl.Std.ad_Teo[,-c(8,10)] # the removed columns are "value" and "sqrtVp"
+Teo.wide.St.D_A <- pivot_wider(Teo.wide.St.D_A, names_from = parameter, values_from = std_Val) # changing the data frame "Teo.wide.St.D_A" from longer
+names(Teo.wide.St.D_A)[c(8,9)] = c("std_A_eff", "std_D_eff")
+Teo.wide.St.D_A$D.A <- Teo.wide.St.D_A$std_D_eff / Teo.wide.St.D_A$std_A_eff
+str(Teo.wide.St.D_A)
+Teo.wide.St.D_A$specie <- "Teosinte"
+range(Teo.wide.St.D_A$D.A)
+
+ggplot(Teo.wide.St.D_A, aes(x=D.A)) + geom_density(color="darkblue", fill="pink", alpha=.2)
+ggplot(temp4, aes(x=D.A)) + geom_density(color="darkblue", fill="pink",alpha=.2)
+
+```
+
+```{r}
+#dddddddddddddddddddddddd> Maize - Teosinte <dddddddddddddddddddddddd
+
+LRTeo_abSt.D.A <- rbind(LR.wide.St.D_A, Teo.wide.St.D_A[,-5])
+LRTeo_abSt.D.A$specie <- factor(LRTeo_abSt.D.A$specie, levels = c("Teosinte", "Maize"))
+AD_TeoLR_density1 <- ggplot(LRTeo_abSt.D.A, aes(x=D.A, fill=specie)) + geom_density(color="darkblue", alpha=.2)+ theme_bw() + 
+  geom_vline(xintercept = 1, size = 0.35,  linetype="dashed", color = 'gray57')
+AD_TeoLR_density1
+
+LRTeo_St.D.A <- rbind(temp2, temp4[,-5])
+LRTeo_St.D.A$specie <- factor(LRTeo_St.D.A$specie, levels = c("Teosinte", "Maize"))
+AD_TeoLR_density2 <-ggplot(LRTeo_St.D.A, aes(x=D.A, fill=specie)) + geom_density(color="darkblue", alpha=.2)+ theme_bw()
+AD_TeoLR_density2
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/AD_TeoLR_density2.png", height = 600, width = 1200, res = 180) 
+AD_TeoLR_density2
+dev.off()
+
+#write.table(LR.wide.St.D_A, "/media/lfs/BLACK-32/Rare_alleles_scan/graphs_for_manus/LR.wide.St.D_A.csv", row.names = F, quote = F, sep = ",")
+```
+
+#===============================================================================================================================
+ Sec. 8 Counting Favorable and Unfavorable recessive alleles per species (maize & teosinte) based on the additive and dominance effects
+#===============================================================================================================================
+MAIZE
+
+```{r}
+# >>>>>>>>>>>>>>>>>>>  Maize  <<<<<<<<<<<<<<<<<<<<<<<<
+# the data frame "qtl.LR_ad" was created in Sec. 5
+LR_a0 <- qtl.LR_ad[qtl.LR_ad$parameter == "a_effect" & qtl.LR_ad$value == 0 ,] # checking if there is any QTL with zero additive effect
+rm(LR_a0)
+
+LR_a <- qtl.LR_ad[qtl.LR_ad$parameter == "a_effect",] # just to checking
+LR_d <- qtl.LR_ad[qtl.LR_ad$parameter == "d_effect",] # just to checking
+rm(LR_a, LR_d)
+
+# changing the data frame "qtl.LR_ad" from longer to wider to create "LRadEf"
+LRadEf <- pivot_wider(qtl.LR_ad, names_from = parameter, values_from = value) 
+LRadEf$a_effect <- as.numeric(LRadEf$a_effect)
+LRadEf$d_effect <- as.numeric(LRadEf$d_effect)
+str(LRadEf)
+
+# I added EILN because it goes in opposite direction as flowering time traits
+LRadEf_Flow <- LRadEf[LRadEf$Trait == "DTA" | LRadEf$Trait == "DTS" | LRadEf$Trait == "EILN",] 
+LRadEf_noFlow <- LRadEf[LRadEf$Trait != "DTA" & LRadEf$Trait != "DTS" & LRadEf$Trait != "EILN",]
+
+# From data frame "LRadEf" get a data frame for each category of rare allele actions e.g. "recessive and favorite alleles", "recessive and unfavorite alleles", and so on
+
+LRadEf_Rece_Unf1 <- LRadEf_noFlow[LRadEf_noFlow$a_effect < 0 & LRadEf_noFlow$d_effect > 0,]  
+LRadEf_Rece_Unf2 <- LRadEf_Flow[LRadEf_Flow$a_effect > 0 & LRadEf_Flow$d_effect < 0,]
+LRadEf_Rece_Unf <- rbind(LRadEf_Rece_Unf1, LRadEf_Rece_Unf2) # Rare Allele Recessive Unfavorite Prop = 85/173 = 0.49
+rm(LRadEf_Rece_Unf1, LRadEf_Rece_Unf2)
+
+LRadEf_Rece_Fav1 <- LRadEf_noFlow[LRadEf_noFlow$a_effect > 0 & LRadEf_noFlow$d_effect < 0,]  
+LRadEf_Rece_Fav2 <- LRadEf_Flow[LRadEf_Flow$a_effect < 0 & LRadEf_Flow$d_effect > 0,]
+LRadEf_Rece_Fav <- rbind(LRadEf_Rece_Fav1, LRadEf_Rece_Fav2) # Rare Allele Recessive Favorite   Prop = 26/173 = 0.15 
+rm(LRadEf_Rece_Fav1, LRadEf_Rece_Fav2)
+
+LRadEf_Dom_Unf1 <- LRadEf_noFlow[LRadEf_noFlow$a_effect < 0 & LRadEf_noFlow$d_effect < 0 & LRadEf_noFlow$a_effect < LRadEf_noFlow$d_effect,]
+LRadEf_Dom_Unf2 <- LRadEf_Flow[LRadEf_Flow$a_effect > 0 & LRadEf_Flow$d_effect > 0 & LRadEf_Flow$a_effect > LRadEf_Flow$d_effect,]
+LRadEf_Dom_Unf <- rbind(LRadEf_Dom_Unf1, LRadEf_Dom_Unf2) # Rare Allele Dominant Unfavorite Prop = 15/173 = 0.09 
+rm(LRadEf_Dom_Unf1, LRadEf_Dom_Unf2)
+
+LRadEf_Dom_Fav1 <- LRadEf_noFlow[LRadEf_noFlow$a_effect > 0 & LRadEf_noFlow$d_effect > 0 & LRadEf_noFlow$a_effect > LRadEf_noFlow$d_effect,] 
+LRadEf_Dom_Fav2 <- LRadEf_Flow[LRadEf_Flow$a_effect < 0 & LRadEf_Flow$d_effect < 0 & LRadEf_Flow$a_effect < LRadEf_Flow$d_effect,]
+LRadEf_Dom_Fav <- rbind(LRadEf_Dom_Fav1, LRadEf_Dom_Fav2) # Rare Allele Dominant Favorite   Prop = 13/173 = 0.08 
+rm(LRadEf_Dom_Fav1, LRadEf_Dom_Fav2)
+
+LRadEf_0dom_Unf <- LRadEf[LRadEf$a_effect < 0 & LRadEf$d_effect == 0,] # Rare Allele zero dominance Unfavorite. Prop = 4/173 = 0.023 
+LRadEf_0dom_Fav <- LRadEf[LRadEf$a_effect > 0 & LRadEf$d_effect == 0,] # Rare Allele zero dominance Favorite   Prop = 8/173 = 0.046
+
+LRadEf_compDom <- LRadEf[LRadEf$a_effect == LRadEf$d_effect,]          # Rare Allele complete dominance Prop = 0
+
+LRadEf_OverD_Unf1 <- LRadEf_noFlow[LRadEf_noFlow$a_effect < 0 & LRadEf_noFlow$a_effect > LRadEf_noFlow$d_effect,] 
+LRadEf_OverD_Unf2 <- LRadEf_Flow[LRadEf_Flow$a_effect > 0 & LRadEf_Flow$a_effect < LRadEf_Flow$d_effect,]
+LRadEf_OverD_Unf <- rbind(LRadEf_OverD_Unf1, LRadEf_OverD_Unf2)   # Rare Allele Overdominance Unfavorite Prop = 11/173 = 0.06 
+rm(LRadEf_OverD_Unf1, LRadEf_OverD_Unf2)
+
+LRadEf_OverD_Fav1 <- LRadEf_noFlow[LRadEf_noFlow$a_effect > 0 & LRadEf_noFlow$a_effect < LRadEf_noFlow$d_effect,] 
+LRadEf_OverD_Fav2 <- LRadEf_Flow[LRadEf_Flow$a_effect < 0 & LRadEf_Flow$a_effect > LRadEf_Flow$d_effect,]
+LRadEf_OverD_Fav <- rbind(LRadEf_OverD_Fav1, LRadEf_OverD_Fav2)   # Rare Allele Overdominance Favorite Prop = 11/173 = 0.06 
+rm(LRadEf_OverD_Fav1, LRadEf_OverD_Fav2)
+
+Rec_Dom_allele_lr <- data.frame(Rare_Allele = c("Rec", "Rec", "Dom", "Dom", "OverD", "OverD"), 
+                             Eff_Direct = c("Unfavorite", "Favorite", "Unfavorite", "Favorite", "Unfavorite", "Favorite"), 
+                             Prop = c(0.49, 0.15, 0.09, 0.08, 0.06, 0.06))
+
+Rec_Dom_allele_lr$Rare_Allele <- factor(Rec_Dom_allele_lr$Rare_Allele, levels = c("Rec", "Dom", "OverD"))
+
+# Getting a bar plot showing general proportion of rare allele action (recessive favorites, etc) for all the QTL detected in maize (207)
+
+rec_dom_bar_lr <- ggplot(Rec_Dom_allele_lr, aes(x=Rare_Allele, y=Prop, fill=Eff_Direct)) + geom_bar(stat = "identity") + 
+  xlab("QTL action") + ylab("Proportion Rare Alleles") + 
+  scale_fill_manual(values = c("darkseagreen3", "darkseagreen4")) + theme_classic()
+
+rec_dom_bar_lr
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL_action_LR.png", height = 700, width = 600, res = 200) 
+rec_dom_bar_lr
+dev.off()
+```
+TEOSINTE
+
+```{r}
+# >>>>>>>>>>>>>>>>>>>  Teosinte  <<<<<<<<<<<<<<<<<<<<<<<<
+# the data frame qtl.Teo_ad was created in the previous chunk of code
+
+Teo_a0 <- qtl.Teo_ad[qtl.Teo_ad$parameter == "a_effect" & qtl.Teo_ad$value == 0 ,] # checking if there is any QTL with zero additive effect 
+rm(Teo_a0)
+
+Teo_a <- qtl.Teo_ad[qtl.Teo_ad$parameter == "a_effect",] # just to checking
+Teo_d <- qtl.Teo_ad[qtl.Teo_ad$parameter == "d_effect",] # just to checking
+rm(Teo_a, Teo_d)
+
+# changing the data frame "qtl.LR_ad" from longer to wider to wider to create "TeoadEf"
+TeoadEf <- pivot_wider(qtl.Teo_ad, names_from = parameter, values_from = value) 
+TeoadEf$a_effect <- as.numeric(TeoadEf$a_effect)
+TeoadEf$d_effect <- as.numeric(TeoadEf$d_effect)
+str(TeoadEf)
+
+TeoadEf_Flow <- TeoadEf[TeoadEf$Trait == "DTA" | TeoadEf$Trait == "DTS" | TeoadEf$Trait == "EILN",]
+TeoadEf_noFlow <- TeoadEf[TeoadEf$Trait != "DTA" & TeoadEf$Trait != "DTS" & TeoadEf$Trait != "EILN",]
+
+# From data frame "TeoadEf" get a data frame for each category of rare allele e.g. "recessive and favorite alleles", "recessive and unfavorite alleles", and so on
+
+TeoadEf_Rece_Unf1 <- TeoadEf_noFlow[TeoadEf_noFlow$a_effect < 0 & TeoadEf_noFlow$d_effect > 0,]  
+TeoadEf_Rece_Unf2 <- TeoadEf_Flow[TeoadEf_Flow$a_effect > 0 & TeoadEf_Flow$d_effect < 0,]
+TeoadEf_Rece_Unf <- rbind(TeoadEf_Rece_Unf1, TeoadEf_Rece_Unf2) # Rare Allele Recessive Unfavorite Prop = 229/468 = 0.49 
+rm(TeoadEf_Rece_Unf1, TeoadEf_Rece_Unf2)
+
+TeoadEf_Rece_Fav1 <- TeoadEf_noFlow[TeoadEf_noFlow$a_effect > 0 & TeoadEf_noFlow$d_effect < 0,]  
+TeoadEf_Rece_Fav2 <- TeoadEf_Flow[TeoadEf_Flow$a_effect < 0 & TeoadEf_Flow$d_effect > 0,]
+TeoadEf_Rece_Fav <- rbind(TeoadEf_Rece_Fav1, TeoadEf_Rece_Fav2) # Rare Allele Recessive Favorite   Prop = 91/468 = 0.19 
+rm(TeoadEf_Rece_Fav1, TeoadEf_Rece_Fav2)
+
+TeoadEf_Dom_Unf1 <- TeoadEf_noFlow[TeoadEf_noFlow$a_effect < 0 & TeoadEf_noFlow$d_effect < 0 & 
+                                     TeoadEf_noFlow$a_effect < TeoadEf_noFlow$d_effect,]
+TeoadEf_Dom_Unf2 <- TeoadEf_Flow[TeoadEf_Flow$a_effect > 0 & TeoadEf_Flow$d_effect > 0 & TeoadEf_Flow$a_effect > TeoadEf_Flow$d_effect,]
+TeoadEf_Dom_Unf <- rbind(TeoadEf_Dom_Unf1, TeoadEf_Dom_Unf2) # Rare Allele Dominant Unfavorite Prop = 53/468 = 0.11 
+rm(TeoadEf_Dom_Unf1, TeoadEf_Dom_Unf2)
+
+TeoadEf_Dom_Fav1 <- TeoadEf_noFlow[TeoadEf_noFlow$a_effect > 0 & TeoadEf_noFlow$d_effect > 0 & 
+                                     TeoadEf_noFlow$a_effect > TeoadEf_noFlow$d_effect,] 
+TeoadEf_Dom_Fav2 <- TeoadEf_Flow[TeoadEf_Flow$a_effect < 0 & TeoadEf_Flow$d_effect < 0 & TeoadEf_Flow$a_effect < TeoadEf_Flow$d_effect,]
+TeoadEf_Dom_Fav <- rbind(TeoadEf_Dom_Fav1, TeoadEf_Dom_Fav2) # Rare Allele Dominant Favorite Prop = 44/468 = 0.09 
+rm(TeoadEf_Dom_Fav1, TeoadEf_Dom_Fav2)
+
+TeoadEf_0dom_Unf <- TeoadEf[TeoadEf$a_effect < 0 & TeoadEf$d_effect == 0,] # Rare Allele zero dominance Unfa. Prop = 0 
+TeoadEf_0dom_Fav <- TeoadEf[TeoadEf$a_effect > 0 & TeoadEf$d_effect == 0,] # Rare Allele zero dominance Fav   Prop = 4/466 = 0.0085
+
+TeoadEf_compDom <- TeoadEf[TeoadEf$a_effect == TeoadEf$d_effect,]          # Rare Allele complete dominance Prop = 0
+
+TeoadEf_OverD_Unf1 <- TeoadEf_noFlow[TeoadEf_noFlow$a_effect < 0 & TeoadEf_noFlow$a_effect > TeoadEf_noFlow$d_effect,] 
+TeoadEf_OverD_Unf2 <- TeoadEf_Flow[TeoadEf_Flow$a_effect > 0 & TeoadEf_Flow$a_effect < TeoadEf_Flow$d_effect,]
+TeoadEf_OverD_Unf <- rbind(TeoadEf_OverD_Unf1, TeoadEf_OverD_Unf2)   # Rare Allele Overdominance Unfavorite Prop = 23/468 = 0.05
+rm(TeoadEf_OverD_Unf1, TeoadEf_OverD_Unf2)
+
+TeoadEf_OverD_Fav1 <- TeoadEf_noFlow[TeoadEf_noFlow$a_effect > 0 & TeoadEf_noFlow$a_effect < TeoadEf_noFlow$d_effect,] 
+TeoadEf_OverD_Fav2 <- TeoadEf_Flow[TeoadEf_Flow$a_effect < 0 & TeoadEf_Flow$a_effect > TeoadEf_Flow$d_effect,]
+TeoadEf_OverD_Fav <- rbind(TeoadEf_OverD_Fav1, TeoadEf_OverD_Fav2)   # Rare Allele Overdominance Favorite Prop = 24/468 = 0.05
+rm(TeoadEf_OverD_Fav1, TeoadEf_OverD_Fav2)
+
+
+
+Rec_Dom_allele_teo <- data.frame(Rare_Allele = c("Rec", "Rec", "Dom", "Dom", "OverD", "OverD" ), 
+                             Eff_Direct = c("Unfavorite", "Favorite", "Unfavorite", "Favorite", "Unfavorite", "Favorite"), 
+                             Prop = c(0.49, 0.19, 0.11, 0.09, 0.05, 0.05))
+
+Rec_Dom_allele_teo$Rare_Allele <- factor(Rec_Dom_allele_teo$Rare_Allele, levels = c("Rec", "Dom", "OverD"))
+
+# Getting a bar plot showing general proportion of rare allele action (recessive favorites, etc) for all the QTL detected in teosinte (426)
+
+rec_dom_bar_teo <- ggplot(Rec_Dom_allele_teo, aes(x=Rare_Allele, y=Prop, fill=Eff_Direct)) + geom_bar(stat = "identity") + 
+  xlab("QTL action") + ylab("Proportion Rare Alleles") + 
+  scale_fill_manual(values = c("darkseagreen3", "darkseagreen4")) + theme_classic()
+
+rec_dom_bar_teo
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL_action_Teo.png", height = 700, width = 600, res = 200) 
+rec_dom_bar_teo
+dev.off()
+```
+#===============================================================================================================================
+ Sec. 9 Counting Favorable and Unfavorable recessive alleles per group trait into each specie (maize & teosinte) based on the additive 
+ and dominance effects
+#===============================================================================================================================
+```{r}
+# (((((((((((((( Maize  ))))))))))))))
+# the data frame LRadEf was created in Sec 7
+# In data frame "LRadEf", Adding a new column (Action) to classify the action of each QTL (e.g. "recessive favorite alleles") instead to create a data frame for each category as I did in previous chunk code
+
+LRadEf$Action = "NA"
+
+LRadEf$Action[LRadEf$a_effect < 0 & LRadEf$d_effect > 0] = "Rece_Unf"
+LRadEf$Action[LRadEf$a_effect > 0 & LRadEf$d_effect < 0] = "Rece_Fav"
+
+LRadEf$Action[LRadEf$a_effect < 0 & LRadEf$d_effect < 0 & LRadEf$a_effect < LRadEf$d_effect] = "Dom_Unf"
+LRadEf$Action[LRadEf$a_effect > 0 & LRadEf$d_effect > 0 & LRadEf$a_effect > LRadEf$d_effect] = "Dom_Fav"
+
+LRadEf$Action[LRadEf$a_effect < 0 & LRadEf$d_effect == 0] = "0dom_Unf"
+LRadEf$Action[LRadEf$a_effect > 0 & LRadEf$d_effect == 0] = "0dom_Fav"
+
+LRadEf$Action[LRadEf$a_effect < 0 & LRadEf$a_effect > LRadEf$d_effect] = "OverD_Unf"
+LRadEf$Action[LRadEf$a_effect > 0 & LRadEf$a_effect < LRadEf$d_effect] = "OverD_Fav"
+
+Actioncounts = count(LRadEf, Action)
+
+# From "LRadEf" I created three data frames (e.g. Actioncounts_VF) that summarize QTL actions into each group trait 
+library(DataCombine)
+LRadEf_VF <- LRadEf[LRadEf$Gr_Trait == "Veg/Flo",]
+Actioncounts_VF = count(LRadEf_VF, Action)
+Actioncounts_VF <- InsertRow(Actioncounts_VF, NewRow = c("Dom_Fav", 0))
+Actioncounts_VF <- Actioncounts_VF[with(Actioncounts_VF, order(Action)),]
+Actioncounts_VF$Action <- as.factor(Actioncounts_VF$Action)
+#Actioncounts_VF$Action <- factor(Actioncounts_VF, levels = c("Rece_Unf", "Rece_Fav", "0dom_Unf", "0dom_Fav", "Dom_Unf", "Dom_Fav", "OverD_Unf", "OverD_Fam"))
+Actioncounts_VF$n <- as.numeric(Actioncounts_VF$n)
+Actioncounts_VF$Gr_Trait <- "Veg/Flo"
+Actioncounts_VF$Prop <- Actioncounts_VF$n / 74
+str(Actioncounts_VF)
+
+LRadEf_ER <- LRadEf[LRadEf$Gr_Trait == "Env Resp",]
+Actioncounts_ER = count(LRadEf_ER, Action)
+Actioncounts_ER <- Actioncounts_ER[with(Actioncounts_ER, order(Action)),]
+Actioncounts_ER$Action <- as.factor(Actioncounts_ER$Action)
+Actioncounts_ER$n <- as.numeric(Actioncounts_ER$n)
+Actioncounts_ER$Gr_Trait <- "Env Resp"
+Actioncounts_ER$Prop <- Actioncounts_ER$n / 66
+str(Actioncounts_ER)
+
+LRadEf_Re <- LRadEf[LRadEf$Gr_Trait == "Reprod",]
+Actioncounts_Re = count(LRadEf_Re, Action)
+Actioncounts_Re <- InsertRow(Actioncounts_Re, NewRow = c("0dom_Unf", 0))
+Actioncounts_Re <- InsertRow(Actioncounts_Re, NewRow = c("0dom_Fav", 0))
+Actioncounts_Re <- Actioncounts_Re[with(Actioncounts_Re, order(Action)),]
+Actioncounts_Re$Action <- as.factor(Actioncounts_Re$Action)
+Actioncounts_Re$n <- as.numeric(Actioncounts_Re$n)
+Actioncounts_Re$Gr_Trait <- "Reprod"
+Actioncounts_Re$Prop <- Actioncounts_Re$n / 67
+str(Actioncounts_Re)
+
+Actcounts_Gr <- rbind(Actioncounts_VF, Actioncounts_ER, Actioncounts_Re)
+# Adding a new column (Type_Act) that contains labels "Unfavorite" and "Favorite" for each QTL
+Actcounts_Gr$Type_Act <- Actcounts_Gr$Action
+
+Actcounts_Gr$Type_Act <- recode(Actcounts_Gr$Type_Act, "Rece_Unf"="Unfavorite", "Rece_Fav"="Favorite", 
+                                "0dom_Unf"="Unfavorite", "0dom_Fav"="Favorite", 
+                                "Dom_Unf"="Unfavorite", "Dom_Fav"="Favorite")
+
+# Recoding the column "Action" as will shown in the plot
+Actcounts_Gr$Action <- recode(Actcounts_Gr$Action, "Rece_Unf"="Rec", "Rece_Fav"="Rec", 
+                                "0dom_Unf"="d=0", "0dom_Fav"="d=0", 
+                                "Dom_Unf"="Dom", "Dom_Fav"="Dom")
+
+Actcounts_Gr$Action <- factor(Actcounts_Gr$Action, levels = c("Rec", "d=0", "Dom"))
+Actcounts_Gr$Gr_Trait <- as.factor(Actcounts_Gr$Gr_Trait)
+Actcounts_Gr$Gr_Trait <- factor(Actcounts_Gr$Gr_Trait, levels = c("Veg/Flo", "Env Resp", "Reprod"))
+str(Actcounts_Gr)
+
+plot_act_gr = ggplot(Actcounts_Gr, aes(x=Action, y=Prop, fill = Type_Act)) + geom_bar(stat = "identity") + 
+  facet_wrap(facets = . ~ Gr_Trait, ncol = 1) + 
+  xlab("QTL action") + ylab("Prop Rare Alleles") + 
+  scale_fill_manual(values = c("darkseagreen3", "darkseagreen4")) + theme_classic() + theme(strip.background = element_rect(color = "white"))
+
+plot_act_gr
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL_action_LR_gr.png", height = 700, width = 500, res = 180) 
+plot_act_gr
+dev.off()  
+
+
+# (((((((((((((( Teo  ))))))))))))))
+# the data frame TeoadEf was created in the previous chunk of code
+# In data frame "TeoadEf", Adding a new column (Action) to classify the action of each QTL (e.g. "recessive favorite alleles") instead to create a data frame for each category as I did in previous chunk code
+TeoadEf$Action = "NA"
+
+TeoadEf$Action[TeoadEf$a_effect < 0 & TeoadEf$d_effect > 0] = "Rece_Unf"
+TeoadEf$Action[TeoadEf$a_effect > 0 & TeoadEf$d_effect < 0] = "Rece_Fav"
+
+TeoadEf$Action[TeoadEf$a_effect < 0 & TeoadEf$d_effect < 0 & TeoadEf$a_effect < TeoadEf$d_effect] = "Dom_Unf"
+TeoadEf$Action[TeoadEf$a_effect > 0 & TeoadEf$d_effect > 0 & TeoadEf$a_effect > TeoadEf$d_effect] = "Dom_Fav"
+
+TeoadEf$Action[TeoadEf$a_effect < 0 & TeoadEf$d_effect == 0] = "0dom_Unf"
+TeoadEf$Action[TeoadEf$a_effect > 0 & TeoadEf$d_effect == 0] = "0dom_Fav"
+
+TeoadEf$Action[TeoadEf$a_effect < 0 & TeoadEf$a_effect > TeoadEf$d_effect] = "OverD_Unf"
+TeoadEf$Action[TeoadEf$a_effect > 0 & TeoadEf$a_effect < TeoadEf$d_effect] = "OverD_Fav"
+
+Actioncounts = count(TeoadEf, Action)
+
+# From "TeoadEf" I created three data frames (e.g. Actioncounts_VF) that summarize QTL actions into each group trait 
+library(DataCombine)
+TeoadEf_VF <- TeoadEf[TeoadEf$Gr_Trait == "Veg/Flo",]
+Actioncounts_VF = count(TeoadEf_VF, Action)
+Actioncounts_VF <- InsertRow(Actioncounts_VF, NewRow = c("0dom_Unf", 0))
+Actioncounts_VF <- InsertRow(Actioncounts_VF, NewRow = c("OverD_Unf", 0))
+Actioncounts_VF <- InsertRow(Actioncounts_VF, NewRow = c("OverD_Fav", 0))
+Actioncounts_VF <- Actioncounts_VF[with(Actioncounts_VF, order(Action)),]
+Actioncounts_VF$Action <- as.factor(Actioncounts_VF$Action)
+#Actioncounts_VF$Action <- factor(Actioncounts_VF, levels = c("Rece_Unf", "Rece_Fav", "0dom_Unf", "0dom_Fav", "Dom_Unf", "Dom_Fav", "OverD_Unf", "OverD_Fam"))
+Actioncounts_VF$n <- as.numeric(Actioncounts_VF$n)
+Actioncounts_VF$Gr_Trait <- "Veg/Flo"
+Actioncounts_VF$Prop <- Actioncounts_VF$n / 122
+str(Actioncounts_VF)
+
+TeoadEf_ER <- TeoadEf[TeoadEf$Gr_Trait == "Env Resp",]
+Actioncounts_ER = count(TeoadEf_ER, Action)
+Actioncounts_ER <- InsertRow(Actioncounts_ER, NewRow = c("Dom_Fav", 0))
+Actioncounts_ER <- Actioncounts_ER[with(Actioncounts_ER, order(Action)),]
+Actioncounts_ER$Action <- as.factor(Actioncounts_ER$Action)
+Actioncounts_ER$n <- as.numeric(Actioncounts_ER$n)
+Actioncounts_ER$Gr_Trait <- "Env Resp"
+Actioncounts_ER$Prop <- Actioncounts_ER$n / 72
+str(Actioncounts_ER)
+
+TeoadEf_Re <- TeoadEf[TeoadEf$Gr_Trait == "Reprod",]
+Actioncounts_Re = count(TeoadEf_Re, Action)
+Actioncounts_Re <- Actioncounts_Re[with(Actioncounts_Re, order(Action)),]
+Actioncounts_Re$Action <- as.factor(Actioncounts_Re$Action)
+Actioncounts_Re$n <- as.numeric(Actioncounts_Re$n)
+Actioncounts_Re$Gr_Trait <- "Reprod"
+Actioncounts_Re$Prop <- Actioncounts_Re$n / 232
+str(Actioncounts_Re)
+
+Actcounts_Gr <- rbind(Actioncounts_VF, Actioncounts_ER, Actioncounts_Re)
+# Adding a new column (Type_Act) that contains labels "Unfavorite" and "Favorite" for each QTL
+Actcounts_Gr$Type_Act <- Actcounts_Gr$Action
+
+Actcounts_Gr$Type_Act <- recode(Actcounts_Gr$Type_Act, "Rece_Unf"="Unfavorite", "Rece_Fav"="Favorite", 
+                                "0dom_Unf"="Unfavorite", "0dom_Fav"="Favorite", 
+                                "Dom_Unf"="Unfavorite", "Dom_Fav"="Favorite", 
+                                "OverD_Unf"="Unfavorite", "OverD_Fav"="Favorite")
+
+# Recoding the column "Action" as will shown in the plot
+Actcounts_Gr$Action <- recode(Actcounts_Gr$Action, "Rece_Unf"="Rec", "Rece_Fav"="Rec", 
+                                "0dom_Unf"="d=0", "0dom_Fav"="d=0", 
+                                "Dom_Unf"="Dom", "Dom_Fav"="Dom", 
+                                "OverD_Unf"="OverD", "OverD_Fav"="OverD")
+
+Actcounts_Gr$Action <- factor(Actcounts_Gr$Action, levels = c("Rec", "d=0", "Dom", "OverD"))
+Actcounts_Gr$Gr_Trait <- as.factor(Actcounts_Gr$Gr_Trait)
+Actcounts_Gr$Gr_Trait <- factor(Actcounts_Gr$Gr_Trait, levels = c("Veg/Flo", "Env Resp", "Reprod"))
+str(Actcounts_Gr)
+
+plot_act_gr = ggplot(Actcounts_Gr, aes(x=Action, y=Pro, fill = Type_Act)) + geom_bar(stat = "identity") + 
+  facet_wrap(facets = . ~ Gr_Trait, scales = "free", ncol = 1) + 
+  xlab("QTL action") + ylab("Prop Rare Alleles") + 
+  scale_fill_manual(values = c("darkseagreen3", "darkseagreen4")) + theme_classic() + theme(strip.background = element_rect(color = "white"))
+
+plot_act_gr
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/QTL_action_Teo_gr.png", height = 700, width = 600, res = 180) 
+plot_act_gr
+dev.off()  
+
+```
+#===============================================================================================================================
+
+ Sec. 10 Comparing significant SNPs from WGS-SNP vs RAS
+
+#===============================================================================================================================
+
+# Landraces: Veg/Flowering Time
+```{r}
+# Importing the file that contains GWAS results.This is the S1 Table from Qiuyue et al. 2020
+gwasQTL <- read.delim("G:/My Drive/Backup_Dell_Precision_T3600_1/LANDRACES_2/Rare_alleles_scan/PC_and_Polyno_from_Qiuyue/S1_table.txt", header = T, sep = "\t")
+
+# editing "gwasQTL"
+gwasQTL <- gwasQTL[gwasQTL$Position != "--",] 
+gwasQTL$negLog10P <-  log10(as.numeric(gwasQTL$probF)) * -1
+gwasQTL$approach <- "WGAS"
+# selecting columns: "Population", "Chr", "Name", "Position", "probF", "negLog10P", "Trait", "TraitGroup", and "approach"
+gwasQTL <- gwasQTL[,c(1,5,4,6,10,28,2,3,29)]
+names(gwasQTL)[c(3,4,5)] = c("SNP", "AGPv4_Pos", "p")
+gwasQTL$LOD <- NA
+gwasQTL$Parent <- NA
+# changing columns order as: "Population", "Chr", "SNP", "AGPv4_Pos", "LOD", "p", "negLog10P", "Trait", "TraitGroup", "Parent", "approach"
+gwasQTL <- gwasQTL[,c(1:4,10,5:8,11,9)]
+gwasQTL$AGPv4_Pos <- as.numeric(gwasQTL$AGPv4_Pos)
+gwasQTL$Chr <- as.factor(gwasQTL$Chr)
+gwasQTL$Chr <- factor(gwasQTL$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+
+# Selecting Veg/Flowering Time Traits
+gwasQTL.LR.veg <- gwasQTL[gwasQTL$Population == "Landrace" & gwasQTL$TraitGroup == "Veg/FT",]
+gwasQTL.LR.veg$Trait <- as.factor(gwasQTL.LR.veg$Trait)
+gwasQTL.LR.veg$Trait <- factor(gwasQTL.LR.veg$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+
+
+# Importing the necessary files from RAS results (for Veg-Flo)
+load(file = paste(path.df.LR, "Veg_Flo/", "scans.keep_LR.RData", sep=""))
+load(file = paste(path.df.LR, "Veg_Flo/", "scans.keep.chrom2_LR.RData", sep=""))
+
+# editing "scans.keep_LR"
+scans.keep_LR2 <- scans.keep_LR                              # creating a copy of "scans.keep_LR"
+names(scans.keep_LR2)[4] = "p"                               # changing column name "p_value_add" by "p"
+scans.keep_LR2$negLog10P <- log10(scans.keep_LR2$p) * -1     # getting -Log10 from column "p"
+scans.keep_LR2$TraitGroup <- "Veg/FT"                        # creating new column "TraitGroup"
+scans.keep_LR2$approach <- "RAS"                             # creating new column "approach"
+# selecting columns "SNP", "LOD", "p", "Parent", chrom", "AGPv4_Pos", "Trait", "negLog10P", "TraitGroup", and "approach"
+scans.keep_LR2 <- scans.keep_LR2[,c(1,7,4,9,11,12,8,16:18)] # selecting columns
+scans.keep_LR2 <- scans.keep_LR2[,c(5,1,6,2,3,8,7,9,4,10)]   # ordering columns
+names(scans.keep_LR2)[c(1)] = "Chr"
+str(scans.keep_LR2)
+colnames(scans.keep_LR2)
+
+# editing "scans.keep.chrom2_LR"
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR                        # creating a copy of "scans.keep.chrom2_LR"
+names(scans.keep.chrom2_LR2)[13] = "AGPv4_Pos"                       # renaming column "AGPv4_Pos.x"
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR2[,c(1,3,2,13,9,10,11)] # selecting columns: "chrom", "SNP", "cM", "AGPv4_Pos", "LOD", "Trait", "Parent" 
+names(scans.keep.chrom2_LR2)[1] = "Chr"                              # renaming column 1
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR2[with(scans.keep.chrom2_LR2, order(Trait, Chr, Parent, cM)),] # ordering
+scans.keep.chrom2_LR2$AGPv4_Pos <- as.numeric(scans.keep.chrom2_LR2$AGPv4_Pos)
+scans.keep.chrom2_LR2$Trait <- as.factor(scans.keep.chrom2_LR2$Trait)
+scans.keep.chrom2_LR2$Trait <- factor(scans.keep.chrom2_LR2$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+scans.keep.chrom2_LR2$Chr <- as.factor(scans.keep.chrom2_LR2$Chr)
+scans.keep.chrom2_LR2$Chr <- factor(scans.keep.chrom2_LR2$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(scans.keep.chrom2_LR2)
+
+
+# Creating "gwas_ras.lr.veg" by binding "scans.keep_LR2" and "gwasQTL.LR.veg"
+gwas_ras.lr.veg <- rbind(scans.keep_LR2, gwasQTL.LR.veg[,-1])         # combining "scans.keep_LR2" and "gwasQTL.LR.veg"
+gwas_ras.lr.veg$AGPv4_Pos <- as.numeric(gwas_ras.lr.veg$AGPv4_Pos)
+gwas_ras.lr.veg$approach <- as.factor(gwas_ras.lr.veg$approach)
+gwas_ras.lr.veg$Trait <- as.factor(gwas_ras.lr.veg$Trait)
+gwas_ras.lr.veg$Trait <- factor(gwas_ras.lr.veg$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+gwas_ras.lr.veg$Chr <- as.factor(gwas_ras.lr.veg$Chr)
+gwas_ras.lr.veg$Chr <- factor(gwas_ras.lr.veg$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(gwas_ras.lr.veg)
+
+
+# GRAPH including the whole scan
+
+gwasras.plot.lrveg.wh = ggplot(scans.keep.chrom2_LR2, aes(x = AGPv4_Pos)) +
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.LR.veg,  mapping =  aes(x = AGPv4_Pos, y = negLog10P*20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,20), breaks = c(3.5,10,15,20), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') +  
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() +
+  guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  #geom_hline(yintercept = 3.5, colour = "red", size = 0.3) + 
+  #ylab("-Log10_P") + xlab("cM") + 
+  #ggtitle(paste0("Landrace rare allele scan for 5 Veg/Flo Traits")) + 
+  #scale_y_continuous(breaks=3.5) +
+  #scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() #+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10), 
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"), 
+        axis.text.x = element_text(size = 9), 
+        axis.text.y = element_text(size = 9), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold")) 
+
+gwasras.plot.lrveg.wh
+
+
+# GRAPH including confidence interval (CI) only
+
+gwasras.plot.lrveg.ci = ggplot(gwas_ras.lr.veg, aes(x = AGPv4_Pos)) + 
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), method = loess, span = 0.28, alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.LR.veg, mapping =  aes(x = AGPv4_Pos, y = negLog10P * 20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,23), breaks = c(3.5,10,15,20), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') + 
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() + 
+  guides(fill = guide_legend(title = "Approach", title.position = "top")) +
+  geom_hline(yintercept = 3.5,  linetype="dashed", colour = "gray57", size = 0.3) + 
+  ggtitle(paste0("LR GWAS vs RAS results: Veg/Flowering Time ")) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10),
+        strip.placement = "outside",
+        strip.switch.pad.grid = unit(0.4, "cm"),
+        strip.text.x = element_text(vjust = 4),
+        panel.border = element_rect(size = 0.1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y.right = element_text(vjust = -12)
+        )
+
+  gwasras.plot.lrveg.ci 
+  
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_LR_VegF.png", height = 700, width = 1000, res = 180) 
+gwasras.plot.lrveg.ci
+dev.off()  
+```
+
+# Landraces: Environmental Response
+```{r}
+# Selecting Environmental Response Traits
+gwasQTL.LR.env <- gwasQTL[gwasQTL$Population == "Landrace" & gwasQTL$TraitGroup == "EnvRes",]
+gwasQTL.LR.env$Trait <- as.factor(gwasQTL.LR.env$Trait)
+gwasQTL.LR.env$Trait <- factor(gwasQTL.LR.env$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+
+# Importing necessary files from RAS results (for Env Res)
+load(file = paste(path.df.LR, "Env_Res/", "scans.keep_LR.RData", sep=""))
+load(file = paste(path.df.LR, "Env_Res/", "scans.keep.chrom2_LR.RData", sep=""))
+
+
+# editing "scans.keep_LR"
+scans.keep_LR2 <- scans.keep_LR                              # creating a copy of "scans.keep_LR"
+names(scans.keep_LR2)[4] = "p"                               # changing column name "p_value_add" by "p"
+scans.keep_LR2$negLog10P <- log10(scans.keep_LR2$p) * -1     # getting -Log10 from column "p"
+scans.keep_LR2$TraitGroup <- "Veg/FT"                        # creating new column "TraitGroup"
+scans.keep_LR2$approach <- "RAS"                             # creating new column "approach"
+# selecting columns "SNP", "LOD", "p", "Parent", chrom", "AGPv4_Pos", "Trait", "negLog10P", "TraitGroup", and "approach"
+scans.keep_LR2 <- scans.keep_LR2[,c(1,7,4,9,11,12,8,16:18)] # selecting columns
+scans.keep_LR2 <- scans.keep_LR2[,c(5,1,6,2,3,8,7,9,4,10)]   # ordering columns
+names(scans.keep_LR2)[c(1)] = "Chr"
+str(scans.keep_LR2)
+colnames(scans.keep_LR2)
+
+
+# editing "scans.keep.chrom2_LR"
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR                        # creating a copy of "scans.keep.chrom2_LR"
+names(scans.keep.chrom2_LR2)[13] = "AGPv4_Pos"                       # renaming column "AGPv4_Pos.x"
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR2[,c(1,3,2,13,9,10,11)] # selecting columns: "chrom", "SNP", "cM", "AGPv4_Pos", "LOD", "Trait", "Parent" 
+names(scans.keep.chrom2_LR2)[1] = "Chr"                              # renaming column 1
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR2[with(scans.keep.chrom2_LR2, order(Trait, Chr, Parent, cM)),] # ordering
+scans.keep.chrom2_LR2$AGPv4_Pos <- as.numeric(scans.keep.chrom2_LR2$AGPv4_Pos)
+scans.keep.chrom2_LR2$Trait <- as.factor(scans.keep.chrom2_LR2$Trait)
+scans.keep.chrom2_LR2$Trait <- factor(scans.keep.chrom2_LR2$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+scans.keep.chrom2_LR2$Chr <- as.factor(scans.keep.chrom2_LR2$Chr)
+scans.keep.chrom2_LR2$Chr <- factor(scans.keep.chrom2_LR2$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(scans.keep.chrom2_LR2)
+
+
+# Creating "gwas_ras.lr.env" by binding "scans.keep_LR2" and "gwasQTL.LR.env"
+gwas_ras.lr.env <- rbind(scans.keep_LR2, gwasQTL.LR.env[,-1])         # combining "scans.keep_LR2" and "gwasQTL.LR.env"
+gwas_ras.lr.env$AGPv4_Pos <- as.numeric(gwas_ras.lr.env$AGPv4_Pos)
+gwas_ras.lr.env$approach <- as.factor(gwas_ras.lr.env$approach)
+gwas_ras.lr.env$Trait <- as.factor(gwas_ras.lr.env$Trait)
+gwas_ras.lr.env$Trait <- factor(gwas_ras.lr.env$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+gwas_ras.lr.env$Chr <- as.factor(gwas_ras.lr.env$Chr)
+gwas_ras.lr.env$Chr <- factor(gwas_ras.lr.env$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(gwas_ras.lr.env)
+
+
+# GRAPH including the whole scan
+
+gwasras.plot.lrenv.wh = ggplot(scans.keep.chrom2_LR2, aes(x = AGPv4_Pos)) +
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.LR.env,  mapping =  aes(x = AGPv4_Pos, y = negLog10P*20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,15), breaks = c(3.5,10,15), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free", space = 'free') +  
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() +
+  guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3) + 
+  #ylab("-Log10_P") + xlab("cM") + 
+  ggtitle(paste0("Landrace rare allele scan for 5 Env Resp Traits")) + 
+  #scale_y_continuous(breaks=3.5) +
+  #scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() #+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10), 
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"), 
+        axis.text.x = element_text(size = 7,angle = 90), 
+        axis.text.y = element_text(size = 9), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold")) 
+
+#gwasras.plot.lrenv.wh
+
+#png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_LR_EnvR_Wh.png", height = 700, width = 1000, res = 180) 
+#gwasras.plot.lrenv.wh
+#dev.off()  
+
+
+# GRAPH including confidence interval (CI) only
+
+gwasras.plot.lrenv.ci = ggplot(gwas_ras.lr.env, aes(x = AGPv4_Pos)) + 
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), method = loess, span = 0.28, alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.LR.env, mapping =  aes(x = AGPv4_Pos, y = negLog10P * 20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,18), breaks = c(3.5,10,15), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,12,28))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') + 
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() + 
+  guides(fill = guide_legend(title = "Approach", title.position = "top")) +
+  geom_hline(yintercept = 3.5,  linetype="dashed", colour = "gray57", size = 0.3) + 
+  ggtitle(paste0("LR GWAS vs RAS results: Env Response Time ")) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10),
+        strip.placement = "outside",
+        strip.switch.pad.grid = unit(0.4, "cm"),
+        strip.text.x = element_text(vjust = 4),
+        panel.border = element_rect(size = 0.1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y.right = element_text(vjust = -12)
+        )
+
+  gwasras.plot.lrenv.ci 
+  
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_LR_EnvR.png", height = 700, width = 1000, res = 180) 
+gwasras.plot.lrenv.ci
+dev.off()  
+```
+
+
+# Landraces: Reproductive traits
+```{r}
+# Selecting Environmental Response Traits
+gwasQTL.LR.rep <- gwasQTL[gwasQTL$Population == "Landrace" & gwasQTL$TraitGroup == "Rep",]
+gwasQTL.LR.rep$Trait <- as.factor(gwasQTL.LR.rep$Trait)
+gwasQTL.LR.rep$Trait <- factor(gwasQTL.LR.rep$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+
+# Importing necessary files from RAS results (for Env Res)
+load(file = paste(path.df.LR, "Rep/", "scans.keep_LR.RData", sep=""))
+load(file = paste(path.df.LR, "Rep/", "scans.keep.chrom2_LR.RData", sep=""))
+
+# NOTE: the columns order of the previous loaded files are different to the ones from Veg/Flot traits. I think the reason is because the order column order in the 
+# output files "LR_Rare_allele_scan_output_$_chr_$.csv" is different in some of these data files. See Excel "columns_order.xlsx" located in "G:/My Drive/Backup_Dell_Precision_T3600_1/LANDRACES_2/Rare_alleles_scan/LR/Private_haplotype_test/outputs_NEW3/data_frames_summarize"
+
+# editing "scans.keep_LR"
+scans.keep_LR2 <- scans.keep_LR                              # creating a copy of "scans.keep_LR"
+names(scans.keep_LR2)[4] = "p"                               # changing column name "p_value_add" by "p"
+scans.keep_LR2$negLog10P <- log10(scans.keep_LR2$p) * -1     # getting -Log10 from column "p"
+scans.keep_LR2$TraitGroup <- "Rep"                           # creating new column "TraitGroup"
+scans.keep_LR2$approach <- "RAS"                             # creating new column "approach"
+# selecting columns "SNP", "LOD", "p", "Parent", chrom", "AGPv4_Pos", "Trait", "negLog10P", "TraitGroup", and "approach"
+scans.keep_LR2 <- scans.keep_LR2[,c(1,7,4,9,11,12,8,16:18)] # selecting columns
+scans.keep_LR2 <- scans.keep_LR2[,c(5,1,6,2,3,8,7,9,4,10)]   # ordering columns
+names(scans.keep_LR2)[c(1)] = "Chr"
+str(scans.keep_LR2)
+colnames(scans.keep_LR2)
+
+
+# editing "scans.keep.chrom2_LR"
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR                        # creating a copy of "scans.keep.chrom2_LR"
+names(scans.keep.chrom2_LR2)[13] = "AGPv4_Pos"                       # renaming column "AGPv4_Pos.x"
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR2[,c(1,3,2,13,9,10,11)] # selecting columns: "chrom", "SNP", "cM", "AGPv4_Pos", "LOD", "Trait", "Parent" 
+names(scans.keep.chrom2_LR2)[1] = "Chr"                              # renaming column 1
+scans.keep.chrom2_LR2 <- scans.keep.chrom2_LR2[with(scans.keep.chrom2_LR2, order(Trait, Chr, Parent, cM)),] # ordering
+scans.keep.chrom2_LR2$AGPv4_Pos <- as.numeric(scans.keep.chrom2_LR2$AGPv4_Pos)
+scans.keep.chrom2_LR2$Trait <- as.factor(scans.keep.chrom2_LR2$Trait)
+scans.keep.chrom2_LR2$Trait <- factor(scans.keep.chrom2_LR2$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+scans.keep.chrom2_LR2$Chr <- as.factor(scans.keep.chrom2_LR2$Chr)
+scans.keep.chrom2_LR2$Chr <- factor(scans.keep.chrom2_LR2$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(scans.keep.chrom2_LR2)
+
+
+# Creating "gwas_ras.lr.env" by binding "scans.keep_LR2" and "gwasQTL.LR.env"
+gwas_ras.lr.rep <- rbind(scans.keep_LR2, gwasQTL.LR.rep[,-1])         # combining "scans.keep_LR2" and "gwasQTL.LR.rep"
+gwas_ras.lr.rep$AGPv4_Pos <- as.numeric(gwas_ras.lr.rep$AGPv4_Pos)
+gwas_ras.lr.rep$approach <- as.factor(gwas_ras.lr.rep$approach)
+gwas_ras.lr.rep$Trait <- as.factor(gwas_ras.lr.rep$Trait)
+gwas_ras.lr.rep$Trait <- factor(gwas_ras.lr.rep$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+gwas_ras.lr.rep$Chr <- as.factor(gwas_ras.lr.rep$Chr)
+gwas_ras.lr.rep$Chr <- factor(gwas_ras.lr.rep$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(gwas_ras.lr.rep)
+
+
+# GRAPH including the whole scan
+
+gwasras.plot.lrrep.wh = ggplot(scans.keep.chrom2_LR2, aes(x = AGPv4_Pos)) +
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.LR.rep,  mapping =  aes(x = AGPv4_Pos, y = negLog10P*20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,13), breaks = c(3.5,8,13), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,10,20))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free", space = 'free') +  
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() +
+  guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3) + 
+  #ylab("-Log10_P") + xlab("cM") + 
+  ggtitle(paste0("Landrace rare allele scan for 8 Repro Traits")) + 
+  #scale_y_continuous(breaks=3.5) +
+  #scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() #+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10), 
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"), 
+        axis.text.x = element_text(size = 7,angle = 90), 
+        axis.text.y = element_text(size = 9), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold")) 
+
+#gwasras.plot.lrrep.wh
+
+#png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_LR_Rep_Wh.png", height = 700, width = 1000, res = 180) 
+#gwasras.plot.lrrep.wh
+#dev.off()  
+
+
+# GRAPH including confidence interval (CI) only
+
+gwasras.plot.lrrep.ci = ggplot(gwas_ras.lr.rep, aes(x = AGPv4_Pos)) + 
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), method = loess, span = 0.28, alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.LR.rep, mapping =  aes(x = AGPv4_Pos, y = negLog10P * 20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,20), breaks = c(3.5,10,18), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') + 
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() + 
+  guides(fill = guide_legend(title = "Approach", title.position = "top")) +
+  geom_hline(yintercept = 3.5,  linetype="dashed", colour = "gray57", size = 0.3) + 
+  ggtitle(paste0("LR GWAS vs RAS results: Reproductive Traits")) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 8),
+        strip.placement = "outside",
+        strip.switch.pad.grid = unit(0.4, "cm"),
+        strip.text.x = element_text(vjust = 4),
+        panel.border = element_rect(size = 0.1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y.right = element_text(vjust = -12)
+        )
+
+  gwasras.plot.lrrep.ci 
+  
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_LR_Rep.png", height = 700, width = 1000, res = 180) 
+gwasras.plot.lrrep.ci
+dev.off()  
+```
+
+#===============================================================================================================================
+
+ Sec. 11 Comparing significant SNPs from WGS-SNP vs RAS
+
+#===============================================================================================================================
+
+# Teosinte: Veg/Flowering Time
+```{r}
+# Note: "gwasQTL" was loaded in Seccion 
+# Selecting Veg/Flowering Time Traits
+gwasQTL.Teo.veg <- gwasQTL[gwasQTL$Population == "Teosinte" & gwasQTL$TraitGroup == "Veg/FT",]
+gwasQTL.Teo.veg$Trait <- as.factor(gwasQTL.Teo.veg$Trait)
+gwasQTL.Teo.veg$Trait <- factor(gwasQTL.Teo.veg$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+
+
+# Importing the necessary files from RAS results (for Veg-Flo)
+load(file = paste(path.df.Teo, "Veg_Flo/", "scans.keep_Teo.RData", sep=""))
+load(file = paste(path.df.Teo, "Veg_Flo/", "scans.keep.chrom2_Teo.RData", sep=""))
+
+# editing "scans.keep_Teo"
+scans.keep_Teo2 <- scans.keep_Teo                              # creating a copy of "scans.keep_Teo"
+names(scans.keep_Teo2)[4] = "p"                                # changing column name "p_value_add" by "p"
+scans.keep_Teo2$negLog10P <- log10(scans.keep_Teo2$p) * -1     # getting -Log10 from column "p"
+scans.keep_Teo2$TraitGroup <- "Veg/FT"                         # creating new column "TraitGroup"
+scans.keep_Teo2$approach <- "RAS"                              # creating new column "approach"
+# selecting columns "SNP", "LOD", "p", "Parent", chrom", "AGPv4_Pos", "Trait", "negLog10P", "TraitGroup", and "approach"
+scans.keep_Teo2 <- scans.keep_Teo2[,c(1,7,4,9,11,12,8,17:19)]  # selecting columns
+scans.keep_Teo2 <- scans.keep_Teo2[,c(5,1,6,2,3,8,7,9,4,10)]   # ordering columns
+names(scans.keep_Teo2)[c(1)] = "Chr"
+str(scans.keep_Teo2)
+colnames(scans.keep_Teo2)
+
+
+# editing "scans.keep.chrom2_Teo"
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo                        # creating a copy of "scans.keep.chrom2_LR"
+names(scans.keep.chrom2_Teo2)[14] = "AGPv4_Pos"                        # renaming column "AGPv4_Pos.x"
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo2[,c(1,3,2,14,9,10,11)] # selecting columns: "chrom", "SNP", "cM", "AGPv4_Pos", "LOD", "Trait", "Parent" 
+names(scans.keep.chrom2_Teo2)[1] = "Chr"                               # renaming column 1
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo2[with(scans.keep.chrom2_Teo2, order(Trait, Chr, Parent, cM)),] # ordering
+scans.keep.chrom2_Teo2$AGPv4_Pos <- as.numeric(scans.keep.chrom2_Teo2$AGPv4_Pos)
+scans.keep.chrom2_Teo2$Trait <- as.factor(scans.keep.chrom2_Teo2$Trait)
+scans.keep.chrom2_Teo2$Trait <- factor(scans.keep.chrom2_Teo2$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+scans.keep.chrom2_Teo2$Chr <- as.factor(scans.keep.chrom2_Teo2$Chr)
+scans.keep.chrom2_Teo2$Chr <- factor(scans.keep.chrom2_Teo2$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(scans.keep.chrom2_Teo2)
+colnames(scans.keep.chrom2_Teo2)
+
+
+# Creating "gwas_ras.Teo.veg" by binding "scans.keep_Teo2" and "gwasQTL.Teo.veg"
+gwas_ras.teo.veg <- rbind(scans.keep_Teo2, gwasQTL.Teo.veg[,-1])      # combining "scans.keep_Teo2" and "gwasQTL.Teo.veg"
+gwas_ras.teo.veg$AGPv4_Pos <- as.numeric(gwas_ras.teo.veg$AGPv4_Pos)
+gwas_ras.teo.veg$approach <- as.factor(gwas_ras.teo.veg$approach)
+gwas_ras.teo.veg$Trait <- as.factor(gwas_ras.teo.veg$Trait)
+gwas_ras.teo.veg$Trait <- factor(gwas_ras.teo.veg$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+gwas_ras.teo.veg$Chr <- as.factor(gwas_ras.teo.veg$Chr)
+gwas_ras.teo.veg$Chr <- factor(gwas_ras.teo.veg$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(gwas_ras.teo.veg)
+
+
+# GRAPH including the whole scan
+
+gwasras.plot.teoveg.wh = ggplot(scans.keep.chrom2_Teo2, aes(x = AGPv4_Pos)) +
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.Teo.veg,  mapping =  aes(x = AGPv4_Pos, y = negLog10P*20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,28), breaks = c(3.5,10,15,25), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free", space = 'free') +  
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() +
+  guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3) + 
+  #ylab("-Log10_P") + xlab("cM") + 
+  ggtitle(paste0("Teosinte rare allele scan for 5 Veg/Flo Traits")) + 
+  #scale_y_continuous(breaks=3.5) +
+  #scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() #+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10), 
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"), 
+        axis.text.x = element_text(size = 7,angle = 90), 
+        axis.text.y = element_text(size = 9), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold")) 
+
+#gwasras.plot.teoveg.wh
+
+
+
+# GRAPH including confidence interval (CI) only
+
+gwasras.plot.teoveg.ci = ggplot(gwas_ras.teo.veg, aes(x = AGPv4_Pos)) + 
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), method = loess, span = 0.28, alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.Teo.veg, mapping =  aes(x = AGPv4_Pos, y = negLog10P * 20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,28), breaks = c(3.5,10,15,25), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,38))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') + 
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() + 
+  guides(fill = guide_legend(title = "Approach", title.position = "top")) +
+  geom_hline(yintercept = 3.5,  linetype="dashed", colour = "gray57", size = 0.3) + 
+  ggtitle(paste0("Teo GWAS vs RAS results: Veg/Flowering Time ")) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10),
+        strip.placement = "outside",
+        strip.switch.pad.grid = unit(0.4, "cm"),
+        strip.text.x = element_text(vjust = 4),
+        panel.border = element_rect(size = 0.1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y.right = element_text(vjust = -12)
+        )
+
+gwasras.plot.teoveg.ci 
+  
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_Teo_VegF.png", height = 700, width = 1000, res = 180) 
+gwasras.plot.teoveg.ci
+dev.off()  
+```
+
+# Teosinte: Environmental Response
+
+```{r}
+# Note: "gwasQTL" was loaded in Seccion 
+# Selecting Environmental Response Traits
+gwasQTL.Teo.env <- gwasQTL[gwasQTL$Population == "Teosinte" & gwasQTL$TraitGroup == "EnvRes",]
+gwasQTL.Teo.env$Trait <- as.factor(gwasQTL.Teo.env$Trait)
+gwasQTL.Teo.env$Trait <- factor(gwasQTL.Teo.env$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+
+
+# Importing the necessary files from RAS results (for Env Res)
+load(file = paste(path.df.Teo, "Env_Res/", "scans.keep_Teo.RData", sep=""))
+load(file = paste(path.df.Teo, "Env_Res/", "scans.keep.chrom2_Teo.RData", sep=""))
+
+# editing "scans.keep_Teo"
+scans.keep_Teo2 <- scans.keep_Teo                              # creating a copy of "scans.keep_Teo"
+names(scans.keep_Teo2)[4] = "p"                                # changing column name "p_value_add" by "p"
+scans.keep_Teo2$negLog10P <- log10(scans.keep_Teo2$p) * -1     # getting -Log10 from column "p"
+scans.keep_Teo2$TraitGroup <- "Env_Res"                        # creating new column "TraitGroup"
+scans.keep_Teo2$approach <- "RAS"                              # creating new column "approach"
+# selecting columns "SNP", "LOD", "p", "Parent", chrom", "AGPv4_Pos", "Trait", "negLog10P", "TraitGroup", and "approach"
+scans.keep_Teo2 <- scans.keep_Teo2[,c(1,7,4,9,11,12,8,17:19)]  # selecting columns
+scans.keep_Teo2 <- scans.keep_Teo2[,c(5,1,6,2,3,8,7,9,4,10)]   # ordering columns
+names(scans.keep_Teo2)[c(1)] = "Chr"
+str(scans.keep_Teo2)
+colnames(scans.keep_Teo2)
+
+
+# editing "scans.keep.chrom2_Teo"
+
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo                        # creating a copy of "scans.keep.chrom2_LR"
+names(scans.keep.chrom2_Teo2)[14] = "AGPv4_Pos"                        # renaming column "AGPv4_Pos.x"
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo2[,c(1,3,2,14,9,10,11)] # selecting columns: "chrom", "SNP", "cM", "AGPv4_Pos", "LOD", "Trait", "Parent" 
+names(scans.keep.chrom2_Teo2)[1] = "Chr"                               # renaming column 1
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo2[with(scans.keep.chrom2_Teo2, order(Trait, Chr, Parent, cM)),] # ordering
+scans.keep.chrom2_Teo2$AGPv4_Pos <- as.numeric(scans.keep.chrom2_Teo2$AGPv4_Pos)
+scans.keep.chrom2_Teo2$Trait <- as.factor(scans.keep.chrom2_Teo2$Trait)
+scans.keep.chrom2_Teo2$Trait <- factor(scans.keep.chrom2_Teo2$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+scans.keep.chrom2_Teo2$Chr <- as.factor(scans.keep.chrom2_Teo2$Chr)
+scans.keep.chrom2_Teo2$Chr <- factor(scans.keep.chrom2_Teo2$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(scans.keep.chrom2_Teo2)
+colnames(scans.keep.chrom2_Teo2)
+
+
+# Creating "gwas_ras.Teo.env" by binding "scans.keep_Teo2" and "gwasQTL.Teo.env"
+gwas_ras.teo.env <- rbind(scans.keep_Teo2, gwasQTL.Teo.env[,-1])      # combining "scans.keep_Teo2" and "gwasQTL.Teo.env"
+gwas_ras.teo.env$AGPv4_Pos <- as.numeric(gwas_ras.teo.env$AGPv4_Pos)
+gwas_ras.teo.env$approach <- as.factor(gwas_ras.teo.env$approach)
+gwas_ras.teo.env$Trait <- as.factor(gwas_ras.teo.env$Trait)
+gwas_ras.teo.env$Trait <- factor(gwas_ras.teo.env$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+gwas_ras.teo.env$Chr <- as.factor(gwas_ras.teo.env$Chr)
+gwas_ras.teo.env$Chr <- factor(gwas_ras.teo.env$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(gwas_ras.teo.env)
+
+
+# GRAPH including the whole scan
+
+gwasras.plot.teoenv.wh = ggplot(scans.keep.chrom2_Teo2, aes(x = AGPv4_Pos)) +
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.Teo.env,  mapping =  aes(x = AGPv4_Pos, y = negLog10P*20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,20), breaks = c(3.5,10,18), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free", space = 'free') +  
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() +
+  guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3) + 
+  #ylab("-Log10_P") + xlab("cM") + 
+  ggtitle(paste0("Teosinte rare allele scan for 5 Env Resp Traits")) + 
+  #scale_y_continuous(breaks=3.5) +
+  #scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() #+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10), 
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"), 
+        axis.text.x = element_text(size = 7,angle = 90), 
+        axis.text.y = element_text(size = 9), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold")) 
+
+#gwasras.plot.teoenv.wh
+
+
+
+# editing "scans.keep.chrom2_Teo"
+
+gwasras.plot.teoenv.ci = ggplot(gwas_ras.teo.env, aes(x = AGPv4_Pos)) + 
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), method = loess, span = 0.28, alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.Teo.env, mapping =  aes(x = AGPv4_Pos, y = negLog10P * 20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,20), breaks = c(3.5,10,18), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') + 
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() + 
+  guides(fill = guide_legend(title = "Approach", title.position = "top")) +
+  geom_hline(yintercept = 3.5,  linetype="dashed", colour = "gray57", size = 0.3) + 
+  ggtitle(paste0("Teo GWAS vs RAS results: Env Resp Traits ")) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10),
+        strip.placement = "outside",
+        strip.switch.pad.grid = unit(0.4, "cm"),
+        strip.text.x = element_text(vjust = 4),
+        panel.border = element_rect(size = 0.1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y.right = element_text(vjust = -12)
+        )
+
+gwasras.plot.teoenv.ci 
+  
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_Teo_EnvR.png", height = 700, width = 1000, res = 180) 
+gwasras.plot.teoenv.ci
+dev.off()  
+```
+
+# Teosinte: Reproductive Traits
+```{r}
+# Note: "gwasQTL" was loaded in the risrt step of Section 9
+# Selecting Reproductive Traits
+gwasQTL.Teo.rep <- gwasQTL[gwasQTL$Population == "Teosinte" & gwasQTL$TraitGroup == "Rep",]
+gwasQTL.Teo.rep$Trait <- as.factor(gwasQTL.Teo.rep$Trait)
+gwasQTL.Teo.rep$Trait <- factor(gwasQTL.Teo.rep$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+
+
+# Importing the necessary files from RAS results (for Env Res)
+load(file = paste(path.df.Teo, "Rep/", "scans.keep_Teo.RData", sep=""))
+load(file = paste(path.df.Teo, "Rep/", "scans.keep.chrom2_Teo.RData", sep=""))
+
+# editing "scans.keep_Teo"
+scans.keep_Teo2 <- scans.keep_Teo                              # creating a copy of "scans.keep_Teo"
+names(scans.keep_Teo2)[4] = "p"                                # changing column name "p_value_add" by "p"
+scans.keep_Teo2$negLog10P <- log10(scans.keep_Teo2$p) * -1     # getting -Log10 from column "p"
+scans.keep_Teo2$TraitGroup <- "Env_Res"                        # creating new column "TraitGroup"
+scans.keep_Teo2$approach <- "RAS"                              # creating new column "approach"
+# selecting columns "SNP", "LOD", "p", "Parent", chrom", "AGPv4_Pos", "Trait", "negLog10P", "TraitGroup", and "approach"
+scans.keep_Teo2 <- scans.keep_Teo2[,c(1,7,4,9,11,12,8,17:19)]  # selecting columns
+scans.keep_Teo2 <- scans.keep_Teo2[,c(5,1,6,2,3,8,7,9,4,10)]   # ordering columns
+names(scans.keep_Teo2)[c(1)] = "Chr"
+str(scans.keep_Teo2)
+colnames(scans.keep_Teo2)
+
+
+# editing "scans.keep.chrom2_Teo"
+
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo                        # creating a copy of "scans.keep.chrom2_LR"
+names(scans.keep.chrom2_Teo2)[14] = "AGPv4_Pos"                        # renaming column "AGPv4_Pos.x"
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo2[,c(1,3,2,14,9,10,11)] # selecting columns: "chrom", "SNP", "cM", "AGPv4_Pos", "LOD", "Trait", "Parent" 
+names(scans.keep.chrom2_Teo2)[1] = "Chr"                               # renaming column 1
+scans.keep.chrom2_Teo2 <- scans.keep.chrom2_Teo2[with(scans.keep.chrom2_Teo2, order(Trait, Chr, Parent, cM)),] # ordering
+scans.keep.chrom2_Teo2$AGPv4_Pos <- as.numeric(scans.keep.chrom2_Teo2$AGPv4_Pos)
+scans.keep.chrom2_Teo2$Trait <- as.factor(scans.keep.chrom2_Teo2$Trait)
+scans.keep.chrom2_Teo2$Trait <- factor(scans.keep.chrom2_Teo2$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+scans.keep.chrom2_Teo2$Chr <- as.factor(scans.keep.chrom2_Teo2$Chr)
+scans.keep.chrom2_Teo2$Chr <- factor(scans.keep.chrom2_Teo2$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(scans.keep.chrom2_Teo2)
+colnames(scans.keep.chrom2_Teo2)
+
+
+# Creating "gwas_ras.Teo.env" by binding "scans.keep_Teo2" and "gwasQTL.Teo.rep"
+gwas_ras.teo.rep <- rbind(scans.keep_Teo2, gwasQTL.Teo.rep[,-1])      # combining "scans.keep_Teo2" and "gwasQTL.Teo.rep"
+gwas_ras.teo.rep$AGPv4_Pos <- as.numeric(gwas_ras.teo.rep$AGPv4_Pos)
+gwas_ras.teo.rep$approach <- as.factor(gwas_ras.teo.rep$approach)
+gwas_ras.teo.rep$Trait <- as.factor(gwas_ras.teo.rep$Trait)
+gwas_ras.teo.rep$Trait <- factor(gwas_ras.teo.rep$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+gwas_ras.teo.rep$Chr <- as.factor(gwas_ras.teo.rep$Chr)
+gwas_ras.teo.rep$Chr <- factor(gwas_ras.teo.rep$Chr, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10"))
+str(gwas_ras.teo.rep)
+
+
+# GRAPH including the whole scan
+
+gwasras.plot.teorep.wh = ggplot(scans.keep.chrom2_Teo2, aes(x = AGPv4_Pos)) +
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.Teo.rep,  mapping =  aes(x = AGPv4_Pos, y = negLog10P*20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,20), breaks = c(3.5,10,18), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free", space = 'free') +  
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() +
+  guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3) + 
+  #ylab("-Log10_P") + xlab("cM") + 
+  ggtitle(paste0("Teosinte rare allele scan for 8 Reproductive Traits")) + 
+  #scale_y_continuous(breaks=3.5) +
+  #scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() #+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10), 
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"), 
+        axis.text.x = element_text(size = 7,angle = 90), 
+        axis.text.y = element_text(size = 9), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold")) 
+
+#gwasras.plot.teorep.wh
+
+
+
+# editing "scans.keep.chrom2_Teo"
+
+gwasras.plot.teorep.ci = ggplot(gwas_ras.teo.rep, aes(x = AGPv4_Pos)) + 
+  stat_smooth(geom = 'line', aes(y = LOD, colour = Parent), method = loess, span = 0.28, alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = gwasQTL.Teo.rep, mapping =  aes(x = AGPv4_Pos, y = negLog10P * 20/40), inherit.aes = FALSE, size = 0.9, color = "darkblue", alpha = 0.3) + 
+  scale_y_continuous(limits = c(0,20), breaks = c(3.5,10,18), sec.axis = sec_axis(~ . * 40 / 20 , name = "-Log10 P", breaks = c(0,15,30))) + 
+  facet_grid(facets = Trait ~ Chr, switch = "x", scales = "free_x", space = 'free') + 
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) +   theme_bw() + 
+  guides(fill = guide_legend(title = "Approach", title.position = "top")) +
+  geom_hline(yintercept = 3.5,  linetype="dashed", colour = "gray57", size = 0.3) + 
+  ggtitle(paste0("Teo GWAS vs RAS results: Reproductive Traits ")) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        strip.background = element_blank(), 
+        strip.text.y = element_text(size = 10),
+        strip.placement = "outside",
+        strip.switch.pad.grid = unit(0.4, "cm"),
+        strip.text.x = element_text(vjust = 4),
+        panel.border = element_rect(size = 0.1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.y.right = element_text(vjust = -12)
+        )
+
+gwasras.plot.teorep.ci 
+  
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RASvsGWAS_QTLpos_Teo_Rep.png", height = 700, width = 1000, res = 180) 
+gwasras.plot.teorep.ci
+dev.off()  
+
+```
+#===============================================================================================================================
+
+ Sec. 10 Comparing R2 per model both for Landraces and Teosinte
+#===============================================================================================================================
+
+# Models explanation
+model 1 = Field covariates 
+model 2 = Field covariates + PC
+model 3 = Field covariates + QTL     
+model 4 = Field covariates + PC + QTL
+
+Variance explained by background (BG) alone   =   BG = Model 4 - Model 3
+Variance explained by QTL alone               =   QTL = Model 4 - Model 2
+Variance explained by QTL + BG shared (QBG)   =   QBG = (Model 2 - Model 1) - (Model 4 - Model 3)
+
+```{r}
+#------------
+# Landraces |
+#------------
+final.outputs <- c("G:/My Drive/Teo and landrace/Landrace/Rare_Allele_Scan/final_outputs/")
+
+lr_qtl <- read.delim(paste0(final.outputs, "LR_rare_QTL_summaries.csv", sep = ""), header = T, sep = ",", stringsAsFactors = F)
+
+# MODEL 1
+#LR_qtl_4mod <- lr_qtl[,c(1,3)] %>% rename(model_1 = R2_null_model)
+LR_qtl_4mod <- lr_qtl[,c(1,3)]         # selecting column "R2_null_model"
+names(LR_qtl_4mod)[2] = "model_1"      # column "R2_null_model" =  "model_1"
+
+# MODEL 2
+LR_qtl_4mod$model_2 <- lr_qtl[,4]      # column "R2_PC_model"   =  "model_2"
+
+# MODEL 3
+LR_qtl_4mod$model_3 <- lr_qtl[,3] + lr_qtl[,6] # "R2_null_model" + "R2_due_to_QTL"
+
+# MODEL 4
+LR_qtl_4mod$model_4 <- lr_qtl[,5]      # column "R2_w_QTL" = "model_4"
+
+# Then, we get the R2 as follow
+# note: background alone (BGr) = model 4 - model 3
+
+LR_qtl_4mod$BG <- LR_qtl_4mod$model_4 - LR_qtl_4mod$model_3
+LR_qtl_4mod$QTL <- lr_qtl$R2_due_to_QTL # also (LR_qtl_4mod$model_4 - LR_qtl_4mod$model_2)
+LR_qtl_4mod$QBG_Shared <- abs((LR_qtl_4mod$model_2 - LR_qtl_4mod$model_1) - (LR_qtl_4mod$model_4 - LR_qtl_4mod$model_3))
+
+
+#-----------
+# Teosinte |
+#-----------
+final.outputs <- c("G:/My Drive/Teo and landrace/Teo/Rare Allele Scan/final_outputs/")
+
+teo_qtl <- read.delim(paste0(final.outputs, "Teo_rare_QTL_summaries.csv", sep = ""), header = T, sep = ",", stringsAsFactors = F)
+
+# MODEL 1
+#Teo_qtl_4mod <- teo_qtl[,c(1,3)] %>% rename(model_1 = R2_null_model)
+Teo_qtl_4mod <- teo_qtl[,c(1,3)]                  # selecting column "R2_null_model"
+names(Teo_qtl_4mod)[2] = "model_1"                # column "R2_null_model" =  "model_1"
+
+# MODEL 2
+Teo_qtl_4mod$model_2 <- teo_qtl[,4]               # column "R2_PC_model"   =  "model_2"
+
+# MODEL 3
+Teo_qtl_4mod$model_3 <- teo_qtl[,3] + teo_qtl[,6] # "R2_null_model" + "R2_due_to_QTL"
+
+# MODEL 4
+Teo_qtl_4mod$model_4 <- teo_qtl[,5]               # column "R2_w_QTL" = "model_4"
+
+# Then, we get the R2 as follow
+# note: background alone (BGr) = model 4 - model 3
+
+Teo_qtl_4mod$BG <- Teo_qtl_4mod$model_4 - Teo_qtl_4mod$model_3
+Teo_qtl_4mod$QTL <- teo_qtl$R2_due_to_QTL # also (Teo_qtl_4mod$model_4 - Teo_qtl_4mod$model_2)
+Teo_qtl_4mod$QBG_Shared <- abs((Teo_qtl_4mod$model_2 - Teo_qtl_4mod$model_1) - (Teo_qtl_4mod$model_4 - Teo_qtl_4mod$model_3))
+
+
+LR_qtl_4mod$specie <- "LR"
+Teo_qtl_4mod$specie <- "Teo"
+
+# creating the DF to be used to create the plots
+
+LR_BG <- LR_qtl_4mod[,c(1,6,9)]
+LR_BG$var <- "BG"
+LR_QTL <- LR_qtl_4mod[,c(1,7,9)]
+LR_QTL$var <- "QTL"
+LR_QBG <- LR_qtl_4mod[,c(1,8,9)]
+LR_QBG$var <- "QBG"
+
+teo_BG <- Teo_qtl_4mod[,c(1,6,9)]
+teo_BG$var <- "BG"
+teo_QTL <- Teo_qtl_4mod[,c(1,7,9)]
+teo_QTL$var <- "QTL"
+teo_QBG <- Teo_qtl_4mod[,c(1,8,9)]
+teo_QBG$var <- "QBG"
+
+allta <- list(LR_BG, LR_QTL, LR_QBG, teo_BG, teo_QTL, teo_QBG)
+
+for (i in 1:length(allta)) {
+  names(allta[[i]])[2] <- "R2"
+}
+
+#library(data.table)
+R2_lr_teo <- rbindlist(allta) 
+
+
+# GRAPHS: Bar charts
+
+#library(ggplot2)
+#library(RColorBrewer)
+R2_lr_teo$var <- factor(R2_lr_teo$var, levels=c("BG","QTL", "QBG"))
+ggplot(R2_lr_teo[order(R2_lr_teo$var),], aes( x = var, y = R2, fill = var ) ) + geom_bar( stat = "identity", color = "#2b2b2b",) + 
+  facet_grid( specie ~ Trait ) + xlab("Split variation") 
+
+#+ geom_text( aes( label = paste0( Percentage, "%" ), y = Percentage ), vjust = 1.4, size = 3, color = "white" )
+#ent[order(ent$Method),]
+
+
+
+# Getting the graph for vegetative-flowering time traits
+veg_flo <- c("DTA", "DTS", "PLHT", "LFLN", "LFWD")
+vft <- R2_lr_teo[R2_lr_teo$Trait %in% veg_flo]
+R2_lr_teo$var <- factor(R2_lr_teo$var, levels=c("BG","QTL", "QBG"))
+
+R2_VegFlo <- ggplot(vft[order(vft$var),], aes( x = var, y = R2, fill = var ) ) + geom_bar( stat = "identity") + scale_fill_brewer(palette = "Dark2") + 
+  facet_grid( specie ~ Trait ) + theme_bw() + xlab("Split variation") + theme( strip.text = element_text( size = 10, color = "black", hjust = 0.5, face="bold"), # I added "theme_bw()", I changed color "white" by "black", and I added face = "bold"  
+                                                                  #strip.background = element_rect(fill = "cornsilk4", color = NA ),
+                                                                  strip.background = element_rect(fill = "azure", color = "black" ),    #new
+                                                                  panel.grid.major.x = element_blank(),
+                                                                  panel.grid.minor.x = element_blank(),
+                                                                  panel.grid.minor.y = element_blank(),
+                                                                  panel.grid.major.y = element_line( color = "#b2b2b2" ),
+                                                                  panel.spacing.x = unit( 0.25, "cm" ),
+                                                                  panel.spacing.y = unit( 0.25, "cm" ),
+                                                                  legend.position = "right" ) 
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/R2_split_LR_&_Teo_VFT_traits_2.png", height = 800, width = 1600, res = 200)
+R2_VegFlo
+dev.off()
+
+
+
+# Getting the graph for Enviromental Response Traits
+env_res <- c("TILN", "PROL", "LBNN", "LBLN", "LBIL")
+env <- R2_lr_teo[R2_lr_teo$Trait %in% env_res]
+R2_lr_teo$var <- factor(R2_lr_teo$var, levels=c("BG","QTL", "QBG"))
+
+R2_EnvRes <- ggplot(env[order(env$var),], aes( x = var, y = R2, fill = var ) ) + geom_bar( stat = "identity") + scale_fill_brewer(palette = "Dark2") + 
+  facet_grid( specie ~ Trait )  + theme_bw() + xlab("Split variation") + theme( strip.text = element_text( size = 10, color = "black", hjust = 0.5, face="bold"), # I added "theme_bw()", I changed color "white" by "black", and I added face = "bold" 
+                                                                  #strip.background = element_rect(fill = "cornsilk4", color = NA ),
+                                                                  strip.background = element_rect(fill = "azure", color = "black" ),    #new
+                                                                  panel.grid.major.x = element_blank(),
+                                                                  panel.grid.minor.x = element_blank(),
+                                                                  panel.grid.minor.y = element_blank(),
+                                                                  panel.grid.major.y = element_line( color = "#b2b2b2" ),
+                                                                  panel.spacing.x = unit( 0.25, "cm" ),
+                                                                  panel.spacing.y = unit( 0.25, "cm" ),
+                                                                  legend.position = "right" ) 
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/R2_split_LR_&_Teo_EnvRes_traits_2.png", height = 800, width = 1600, res = 200)
+R2_EnvRes
+dev.off()
+
+
+
+# Getting the graph for Reproductive traits
+no_rep <- c("DTA", "DTS", "PLHT", "LFLN", "LFWD", "TILN", "PROL", "LBNN", "LBLN", "LBIL")
+rep <- R2_lr_teo[!R2_lr_teo$Trait %in% no_rep]
+R2_lr_teo$var <- factor(R2_lr_teo$var, levels=c("BG","QTL", "QBG"))
+
+R2_Rep <- ggplot(rep[order(rep$var),], aes( x = var, y = R2, fill = var ) ) + geom_bar( stat = "identity") + scale_fill_brewer(palette = "Dark2") + 
+  facet_grid( specie ~ Trait ) + theme_bw() + xlab("Split variation") + theme( strip.text = element_text( size = 10, color = "black", hjust = 0.5, face="bold"), # # I added "theme_bw()", I changed color "white" by "black", and I added face = "bold"  
+                                                                  #strip.background = element_rect(fill = "cornsilk4", color = NA ),
+                                                                  strip.background = element_rect(fill = "azure", color = "black" ),    #new
+                                                                  axis.text.x = element_text(angle = 90, hjust = 1),
+                                                                  panel.grid.major.x = element_blank(),
+                                                                  panel.grid.minor.x = element_blank(),
+                                                                  panel.grid.minor.y = element_blank(),
+                                                                  panel.grid.major.y = element_line( color = "#b2b2b2" ),
+                                                                  panel.spacing.x = unit( 0.25, "cm" ),
+                                                                  panel.spacing.y = unit( 0.25, "cm" ),
+                                                                  legend.position = "right" )
+
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/R2_split_LR_&_Teo_Rep_traits_2.png", height = 800, width = 1600, res = 200)
+R2_Rep
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+# Fst data from Qiuyue
+
+```{r}
+
+FstData <- read.delim("/home/lfs/Downloads/weir.fst.txt", sep = "\t")
+
+sampFstData <- head(FstData, 200)
+
+```
+
+
+# Others loading
+
+```{r}
+load(file = paste(path.df.LR, "Veg-Flo/", "scans.keep.chrom2_LR.RData", sep=""))
+```

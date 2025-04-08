@@ -1,0 +1,549 @@
+---
+title: "Summarize Rare Allele Scan for Landrace"
+authors: "Jim Holland" & "Fernando Samayoa"
+date: "November 2020"
+output: html_document
+
+Update: This script was updated (in November 2020) with the final result output files.
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(forcats)
+```
+
+Get the marker position information
+```{r}
+# Google Drive 
+path = ("G:/My Drive/Teo and landrace/Landrace/Rare_Allele_Scan/final_outputs/")
+
+```
+
+Get the linkage map information
+```{r}
+ 
+map <- read.csv("G:/My Drive/Teo and landrace/Inbreeding Depression ms/Final data files/LR_genetic_map.csv")
+```
+
+Make a function to take in a marker_par_hap string and parse into marker, parent, haplotype as three separate strings
+```{r}
+parse_marker = function(mname){
+  unders = gregexpr("_", mname, fixed = T)[[1]]                #get the underscore positions
+  SNP = substr(mname, start = 1, stop = unders[2] - 1)         #1st underscore is part of marker name
+  Parent = substr(mname, unders[2]+1, stop = nchar(mname) - 4) #the 3rd underscore is part of parent name
+  Hap = substr(mname, nchar(mname), nchar(mname))
+  return(c(SNP, Parent, Hap))
+}
+parse_marker("S4_30681_171_7hap1")
+```
+ 
+Get the results for each chromosome and trait, keeping only LOD values within the peak positions maintained in final model in data frame scans.keep, keep all in scans.all. Also keep all marker tests for a given haplotype-parent combination on a given chromosome IF that parent-hap has a QTL somewhere on the same chrom.
+```{r}
+#traits = c("DTA", "DTS", "PLHT", "LFLN", "LFWD")                        # Vegetative/Flowering Time Traits
+#traits =  c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL')                     # Environmental Response Traits
+traits = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW')      # Reproductive Traits
+
+
+final_peaks = read.csv(paste0(path,"LR_rare_QTL_final_marker_effects.csv")) 
+final_peaks <- final_peaks[,-c(14:25)]
+
+#rm(list = ls()[!ls() %in% c("qtl_old", "qtl.keep_old", "qtl.keep.all_old")])
+for (trait  in traits){
+    #get the final QTL peak info:
+    trait_peaks = filter(final_peaks, Trait == trait)
+    qtl  = read.csv(paste0(path, 'QTL peaks LR ', trait, '.csv'))                                            # Reading "QTL peaks LR trait.csv" as "qtl"
+    qtl.keep = merge(qtl, trait_peaks, by.x = c('Trait', 'marker'), by.y = c('Trait','Marker'), all.y = T)   # Merging "qtl" with + "LR_rare_QTL_final_marker_effects.csv"
+    
+    if (exists('qtl.keep.all')) qtl.keep.all = rbind(qtl.keep.all, qtl.keep) else qtl.keep.all = qtl.keep    # this is a useful dataframe for later, let's save it
+    
+    #Now get all the single marker tests within the QTL support intervals for this trait
+    for (chr in 1:10){
+      qtl.chrom = filter(qtl.keep, chrom == chr)
+        scan_results = read.csv(paste0(path, "LR_Rare_allele_scan_output_", trait, "_chr_", chr, ".csv"), 
+                                stringsAsFactors = F, colClasses = c('NULL', 'character', rep('numeric',5), 'character'))  # use "colClasses" to skip first column
+        #scan_results = scan_results[,c(7,3,5,2,4,6)]  # use it to keep only the columns of interest
+        scan_results[,c('SNP', 'Parent', 'Hap')] = t(sapply(as.character(scan_results$marker), FUN = parse_marker))
+        scan_results = merge(scan_results, map,  by.x = "SNP", by.y = "marker")
+        scan_results$Trait = trait
+        scan_results$QTL_SI = 0 #set all QTL_SI values to 0 to start
+        scan_results = filter(scan_results, chrom == chr) #in a few cases, SNP is on wrong chromosome output because of AGP position variation.
+        if (nrow(qtl.chrom) > 0) {
+          for (r in 1:nrow(qtl.chrom)){
+           parent = qtl.chrom[r,"Parent"]
+           hap = qtl.chrom[r,"Hap"]
+           start_cM = qtl.chrom[r,"cM_start"] # changed "start_cM" by "cM_start"
+           end_cM = qtl.chrom[r,"cM_end"]     # changed "end_cM" by "cM_end"
+           scan_par_hap = filter(scan_results, Parent == parent & Hap == hap & cM >= start_cM & cM <= end_cM) #keep all tests within the QTL SI
+           scan_par_hap_chrom = filter(scan_results, Parent == parent & Hap == hap) #keep all tests on the same chrom 
+           scan_results[(scan_results$Parent == parent & scan_results$Hap == hap & scan_results$cM >= start_cM & scan_results$cM <= end_cM ),'QTL_SI'] = 1# %>% mutate(QTL_SI = case_when(Parent == parent & Hap == hap & cM >= start_cM & cM <= end_cM ~ TRUE))
+           if (exists('scans.keep')) scans.keep = rbind(scans.keep, scan_par_hap) else scans.keep = scan_par_hap
+           if (nrow(filter(scans.keep, Parent == '164_1' & chrom == 2 & trait == 'pKN')) > 0){
+             print('whoop there it is!')
+             print(paste('chrom: ', chr))
+             print(paste('Parent: ', parent))
+            print(paste('Trait: ', trait))
+           }
+           if (exists('scans.keep.chrom')) scans.keep.chrom = rbind(scans.keep.chrom, scan_par_hap_chrom) else scans.keep.chrom = scan_par_hap_chrom
+        } #end for loop over rows of qtl.chrom
+      } #end else
+    if (exists('scans.all')) scans.all = rbind(scans.all, scan_results) else scans.all = scan_results
+    } #end for loop over chrom  
+  } #end for loop over traits
+
+#scans.keep$Trait <- factor(scans.keep$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#scans.keep$Trait <- factor(scans.keep$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+scans.keep$Trait <- factor(scans.keep$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+str(scans.keep)
+```
+
+```{r}
+#scans.all$Trait <- factor(scans.all$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#scans.all$Trait <- factor(scans.all$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+scans.all$Trait <- factor(scans.all$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+str(scans.all)
+```
+
+```{r}
+#scans.keep.chrom$Trait <- factor(scans.keep.chrom$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#scans.keep.chrom$Trait <- factor(scans.keep.chrom$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+scans.keep.chrom$Trait <- factor(scans.keep.chrom$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+str(scans.keep.chrom)
+```
+Make Parent and Haplotype factors
+
+```{r}
+scans.keep = mutate(scans.keep, Parent = factor(Parent), Haplotype = factor(Hap)) 
+scans.keep.chrom = mutate(scans.keep.chrom, Parent = factor(Parent), Haplotype = factor(Hap)) 
+scans.all = mutate(scans.all, Parent = factor(Parent), Haplotype = factor(Hap)) 
+```
+- Saving data frames (binary) used for graphs
+
+```{r}
+# 1) Saving data frames in binary format (three DF)
+
+#data_frames_summarize <- "summarize/Veg_Flo/"
+#data_frames_summarize <- "summarize/Env_Res/"
+data_frames_summarize <- "summarize/Rep/"
+
+scans.keep_LR <- scans.keep
+save(scans.keep_LR, file = paste(path, data_frames_summarize, "scans.keep_LR.RData", sep = ""))
+write.table(scans.keep_LR, paste(path, data_frames_summarize, "scans.keep_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+
+scans.keep.chrom_LR <- scans.keep.chrom
+save(scans.keep.chrom_LR, file = paste(path, data_frames_summarize, "scans.keep.chrom_LR.RData", sep = ""))
+write.table(scans.keep.chrom_LR, paste(path, data_frames_summarize, "scans.keep.chrom_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+
+scans.all_LR <- scans.all
+save(scans.all_LR, file = paste(path, data_frames_summarize, "scans.all_LR.RData", sep = ""))
+write.table(scans.all_LR, paste(path, data_frames_summarize, "scans.all_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+
+rm(scans.keep_LR, scans.keep.chrom_LR, scans.all_LR)
+```
+
+Make the plots against genetic distance
+
+Try to plot scan curves on a single X axis for all chromosomes together
+```{r}
+prev_cM = data.frame(chrom = 1:10, prev_cM = 0) #initialize with 0 cM before chrom 1
+to_add = 0
+for (chr in 1:10){
+  prev_cM[prev_cM$chrom == chr,'prev_cM'] = to_add
+  to_add = to_add + as.numeric(max(filter(map, chrom == chr) %>% select(cM)))
+}
+prev_cM
+
+map2 = merge(map, prev_cM)
+map2 = mutate(map2, cM_cum = cM + prev_cM)
+scans.keep2 = merge(scans.keep, map2, by = c('chrom', 'cM'), all.y = T)
+scans.keep2 = scans.keep2[order(scans.keep2$cM_cum),]
+head(scans.keep2)
+tail(scans.keep2)
+
+# 2) Saving data frames in binary format
+map2_LR <- map2
+save(map2_LR, file = paste(path, data_frames_summarize, "map2_LR.RData", sep = ""))
+write.table(map2_LR, paste(path, data_frames_summarize, "map2_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+rm(map2_LR)
+```
+
+
+```{r}
+scans.all2 = merge(scans.all, map2, by = c('chrom', 'cM'))
+scans.all2 = scans.all2[order(scans.all2$cM_cum),]
+head(scans.all2)
+tail(scans.all2)
+
+# 3) Saving data frames in binary format
+scans.all2_LR <- scans.all2
+save(scans.all2_LR, file = paste(path, data_frames_summarize, "scans.all2_LR.RData", sep = ""))
+write.table(scans.all2_LR, paste(path, data_frames_summarize, "scans.all2_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+rm(scans.all2_LR)
+```
+
+```{r}
+scans.keep.chrom2 = merge(scans.keep.chrom, map2, by = c('chrom', 'cM'))
+scans.keep.chrom2 = scans.keep.chrom2[order(scans.keep.chrom2$cM_cum),]
+#scans.keep.chrom2$Trait <- factor(scans.keep.chrom2$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#scans.keep.chrom2$Trait <- factor(scans.keep.chrom2$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+scans.keep.chrom2$Trait <- factor(scans.keep.chrom2$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+#str(scans.keep.chrom2_LR)
+head(scans.keep.chrom2)
+tail(scans.keep.chrom2)
+
+# 4) Saving data frames in binary format
+scans.keep.chrom2_LR <- scans.keep.chrom2
+save(scans.keep.chrom2_LR, file = paste(path, data_frames_summarize, "scans.keep.chrom2_LR.RData", sep = ""))
+write.table(scans.keep.chrom2_LR, paste(path, data_frames_summarize, "scans.keep.chrom2_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+
+rm(scans.keep.chrom2_LR)
+```
+
+Display the marker LOD scores inside of QTL support intervals as points.  
+Display the smoothed LOD curve for the same parent-haplotype combination across the entire chromosome. Parents are differentiated by color, haplotypes by solid vs dashed lines
+```{r}
+scan.plot = ggplot(scans.keep.chrom2, aes(x = cM)) +
+  stat_smooth(geom = 'line', aes(y = LOD, color = Parent, linetype = Haplotype), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = scans.keep, size = 0.4, aes(y = LOD, colour = Parent)) + 
+  facet_grid(facets = Trait ~ chrom, scales = "free", space = 'free_x') +
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) + 
+  #guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3, alpha= 0.5) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  ylab("LOD score") +
+  #xlab("cM") +  ggtitle(paste0("Landrace rare allele scan for Vegetative/Flowering Time Traits")) +
+  #xlab("cM") +  ggtitle(paste0("Landrace rare allele scan for Environmental Response Traits")) +
+  xlab("cM") +  ggtitle(paste0("Landrace rare allele scan for Reproductive Traits")) +
+  scale_y_continuous(breaks=3.5) +
+  scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.y = element_text(size = 11)) +
+  theme(panel.spacing.x=unit(0, "lines"),panel.spacing.y=unit(0, "lines")) +
+  theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold"))
+
+scan.plot
+
+path.graph = ("G:/My Drive/Teo and landrace/Landrace/Rare_Allele_Scan/final_graphs/")
+
+#ggsave(scan.plot, filename = paste0(path.graph, 'LR RAS overview plot_Veg-Flo.png'), width = 9, height = 6)
+#ggsave(scan.plot, filename = paste0(path.graph, 'LR RAS overview plot_Env.png'), width = 8, height = 6)
+ggsave(scan.plot, filename = paste0(path.graph, 'LR RAS overview plot_Reprod.png'), width = 11, height = 8)
+
+```
+
+#Graph Scans for PLHT, PROL, EILN, GE, GW
+```{r}
+path_data = "G:/My Drive/Teo and landrace/Landrace/Rare_Allele_Scan/final_outputs/summarize/"
+
+# getting PLT
+load(file = paste(path_data, "Veg_Flo/", "scans.keep.chrom2_LR.RData", sep=""))
+load(file = paste(path_data, "Veg_Flo/", "scans.keep_LR.RData", sep=""))
+
+Veg_1 <- scans.keep.chrom2_LR[scans.keep.chrom2_LR$Trait == "PLHT",]
+Veg_2 <- scans.keep_LR[scans.keep_LR$Trait == "PLHT",]
+rm(scans.keep_LR, scans.keep.chrom2_LR)
+
+# getting PROL
+load(file = paste(path_data, "Env_Res/", "scans.keep.chrom2_LR.RData", sep=""))
+load(file = paste(path_data, "Env_Res/", "scans.keep_LR.RData", sep=""))
+
+Env_1 <- scans.keep.chrom2_LR[scans.keep.chrom2_LR$Trait == "PROL",]
+Env_2 <- scans.keep_LR[scans.keep_LR$Trait == "PROL",]
+rm(scans.keep_LR, scans.keep.chrom2_LR)
+
+# getting EILN, ED, GW
+load(file = paste(path_data, "Rep/", "scans.keep.chrom2_LR.RData", sep=""))
+load(file = paste(path_data, "Rep/", "scans.keep_LR.RData", sep=""))
+
+Rep_1 <- scans.keep.chrom2_LR[scans.keep.chrom2_LR$Trait == "EILN" | scans.keep.chrom2_LR$Trait == "ED" | scans.keep.chrom2_LR$Trait == "GW",]
+Rep_2 <- scans.keep_LR[scans.keep_LR$Trait == "EILN" | scans.keep_LR$Trait == "ED" | scans.keep_LR$Trait == "GW",]
+rm(scans.keep_LR, scans.keep.chrom2_LR)
+
+scans.keep.chrom2 <- rbind(Veg_1, Env_1, Rep_1)
+scans.keep <- rbind(Veg_2, Env_2, Rep_2)
+
+# Convert to factor to the desired order in the graph in "scans.keep.chrom2" and "scans.keep"
+scans.keep.chrom2$Trait <- factor(scans.keep.chrom2$Trait, levels = c("PLHT", "PROL", "EILN", "ED", "GW"))
+scans.keep$Trait <- factor(scans.keep$Trait, levels = c("PLHT", "PROL", "EILN", "ED", "GW"))
+
+scan.plot2 = ggplot(scans.keep.chrom2, aes(x = cM)) +
+  stat_smooth(geom = 'line', aes(y = LOD, color = Parent, linetype = Haplotype), alpha = 1, size = 0.4, se = F, fullrange = F) + 
+  geom_point(data = scans.keep, size = 0.4, aes(y = LOD, colour = Parent)) + 
+  facet_grid(facets = Trait ~ chrom, scales = "free", space = 'free_x') +
+  theme(strip.text.x = element_text(size = 23)) +
+  guides(colour=FALSE, linetype = FALSE) + 
+  #guides(fill = guide_legend(title = "LEFT", title.position = "top")) +
+  geom_hline(yintercept = 3.5, colour = "red", size = 0.3) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  ylab("LOD score") +
+  #xlab("cM") +  ggtitle(paste0("Landrace rare allele scan for 7 Traits")) +
+  scale_y_continuous(breaks=3.5) +
+  scale_x_continuous(breaks=c(50,150)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.y = element_text(size = 10)) +
+  theme(panel.spacing.x=unit(0, "lines"),panel.spacing.y=unit(0, "lines")) +
+  theme(axis.text.x = element_text(size = 9), axis.text.y = element_text(size = 9), axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold"))
+
+scan.plot2
+
+png("G:/My Drive/Teo and landrace/Inbreeding Depression ms/RAS_summ_graphs_tables/RAS_LR.png", height = 600, width = 1200, res = 170)
+print(scan.plot2)
+dev.off()
+
+```
+As a check on data quality, compare the effect sizes and LOD scores of significant rare allele QTL from different parents vs. family size from those parents
+
+```{r}
+
+traitsdf <- read.csv("G:/My Drive/Teo and landrace/Inbreeding Depression ms/Final data files/Landraces_FL1314_all_data_updated_4398taxa_Fest_2_ed.csv", stringsAsFactors = F)
+
+str(traitsdf)
+#traitsdf = mutate(traitsdf, Mother = GBSMom, Father = GBSDad)
+```
+
+Count family sizes of each parent. Selfs count 2X
+```{r}
+#detach("package:plyr", unload=TRUE)  # this is just to unload package "plyr" in order to use "count" function from package "dplyr"
+
+Momcounts = count(traitsdf, Mother)
+names(Momcounts) = c("Parent", "N_as_mom")
+Dadcounts = count(traitsdf, Father)
+names(Dadcounts) = c("Parent", "N_as_dad")
+MDcounts = merge(Momcounts, Dadcounts) %>% mutate(N_offspring = N_as_mom + N_as_dad)
+
+```
+
+Now get the number of additive QTL per parent across all traits
+```{r}
+final_peaks[,c('SNP', 'Parent', 'Hap')] = t(sapply(as.character(final_peaks$Marker), FUN = parse_marker))
+final_peaks = final_peaks %>% filter(!is.na(r2_AD))
+final_peaks2 = final_peaks %>% filter(Marker != "All markers")
+QTLcounts = final_peaks2 %>% count(Parent)
+names(QTLcounts)[2] = "N_QTL"
+QTL_kid_counts = merge(MDcounts, QTLcounts, all = T)
+
+# 5) Saving data frames in binary format
+QTL_kid_counts_LR <- QTL_kid_counts
+save(QTL_kid_counts_LR, file = paste(path, data_frames_summarize, "QTL_kid_counts_LR.RData", sep = ""))
+write.table(QTL_kid_counts_LR, paste(path, data_frames_summarize, "QTL_kid_counts_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+rm(QTL_kid_counts_LR)
+
+# Get the Plot
+QTL_kid_plot = ggplot(QTL_kid_counts, aes(x = N_offspring, y = N_QTL)) + geom_point(size = 3, color = 'blue') + 
+  ggtitle("Landrace Number of rare allele QTL vs Num. offspring per \nparent for all traits") + 
+  ylab("Number of rare allele QTL") +
+  xlab("Number of offspring (selfs count 2x)") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 12), axis.text.y = element_text(size = 12), axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold"))
+
+QTL_kid_plot
+ggsave(QTL_kid_plot, filename = paste0(path.graph, "LR num of QTL vs offspring LR- All traits.png"), dpi = 400)
+
+```
+
+Check distribution of additive and dominance effects across genome. Issue here is that some QTL have only a confounded a/d effect.
+First melt (or gather) the data set to use for plotting, and add in genomic position information.
+```{r}
+qtl.all.melt = gather(qtl.keep.all, key = parameter, value = value, -Trait, -marker, -SNP, -Parent, -Hap, -chrom, -pos_Agpv4, -cM, -SNP_start, -SNP_end) # I changed "-AGPv4_Pos", "-start_SNP", "-end_SNP" by "-pos_Agpv4", "-SNP_start", "SNP_end", respectively
+
+head(qtl.all.melt) 
+
+qtl.all.melt = qtl.all.melt %>% filter(marker != 'All markers')
+```
+
+Have to merge the melted data frame with map2 so we have all genomic positions represented
+```{r}
+qtl.all.melt2 = merge(qtl.all.melt, map2, by.x = c("chrom", "SNP", "pos_Agpv4", "cM"), by.y = c("chrom", "marker", "AGPv4_Pos", "cM"), all = T)  %>% 
+  mutate(Trait = as.character(Trait),
+         Trait = ifelse(is.na(Trait), 'extra', Trait), # Jim had 'DTA' in the original code but I changed it by 'extra' to avoid confusion
+         parameter = as.character(parameter),
+         parameter = ifelse(is.na(parameter), 'a_effect', parameter)) # note: here I changed "AGP_Pos" by "pos_Agpv4"
+
+qtl.ad = qtl.all.melt2 %>% filter(parameter %in% c('a_effect','d_effect'))  %>% mutate(value = ifelse(is.na(value), 0, value), chrom = factor(chrom)) 
+
+#qtl.ad2 = filter(qtl.ad, value != 0) #remove the extra rows added above to complete the cM map
+qtl.ad2 = filter(qtl.ad, Trait != "extra") # I better filtered by "Trait != extra" instead to filtering by "value" since there are some QTL with add effect with 0 values. This is to remove the extra rows added above to complete the cM map
+
+#Assigning levels to the factor trait
+# Veg-Flo
+#qtl.ad$Trait <- factor(qtl.ad$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#qtl.ad2$Trait <- factor(qtl.ad2$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+
+# Env Response 
+#qtl.ad$Trait <- factor(qtl.ad$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+#qtl.ad2$Trait <- factor(qtl.ad2$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+
+# Reproductive 
+qtl.ad$Trait <- factor(qtl.ad$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+qtl.ad2$Trait <- factor(qtl.ad2$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+
+# 6) Saving data frames in binary format
+qtl.ad_LR <- qtl.ad
+save(qtl.ad_LR, file = paste(path, data_frames_summarize, "qtl.ad_LR.RData", sep = ""))
+write.table(qtl.ad_LR, paste(path, data_frames_summarize, "qtl.ad_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+
+# 7) Saving data frames in binary format
+qtl.ad2_LR <- qtl.ad2
+save(qtl.ad2_LR, file = paste(path, data_frames_summarize, "qtl.ad2_LR.RData", sep = ""))
+write.table(qtl.ad2_LR, paste(path, data_frames_summarize, "qtl.ad2_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+
+rm(qtl.ad_LR, qtl.ad2_LR)
+```
+
+Now plot a and d effects against genomic positions, using same layout as before for LOD scores. To do this, set up the X axis using the map data, so we have complete chromosome positions to plot the QTL info on.
+```{r}
+effect.plot = ggplot(qtl.ad2, aes(x = cM, y = as.numeric(value))) + # Jim used "qtl.ad" in the original code but I think it is better to use "qtl.ad2" instead. 
+  geom_point(data = qtl.ad2, aes(colour = parameter)) + 
+  facet_grid(facets = Trait ~ chrom, scales = "free", space = 'free_x') +
+  #guides(colour=FALSE) +
+  geom_hline(yintercept = 0, size = 0.2, color = 'green') +
+  theme_bw() +
+  ylab("Effect estimate") +
+  xlab("cM") +
+  #ggtitle("Landrace rare allele QTL additive and dominance effects \nfor Vegetative/Flowering Time Traits") +
+  #ggtitle("Landrace rare allele QTL additive and dominance effects \nfor Environmental Response Traits") +
+  ggtitle("Landrace rare allele QTL additive and dominance effects Reproductive Traits") +
+  scale_x_continuous(breaks=c(50,150)) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10)) +
+  theme(panel.spacing.x=unit(0, "lines"), 
+        panel.spacing.y=unit(0, "lines")) +
+  theme(axis.text.x = element_text(size = 12), 
+        axis.text.y = element_text(size = 12), 
+        axis.title = element_text(size=15), 
+        plot.title = element_text(size = 15, face = "bold"),
+        legend.position = "bottom", 
+        legend.text = element_text(size = 12), legend.title = element_text(size = 13))
+
+
+effect.plot 
+#ggsave(effect.plot, filename = paste0(path.graph, "LR rare alle QTL A and D effects_Veg-Flo_.png"), width = 10, height = 7)
+#ggsave(effect.plot, filename = paste0(path.graph, "LR rare alle QTL A and D effects_Env_Res.png"), width = 10, height = 7)
+ggsave(effect.plot, filename = paste0(path.graph, "LR rare alle QTL A and D effects_Reprod.png"), width = 11, height = 8)
+
+```
+
+Now, just do a scatterplot of A and D values
+```{r}
+#converting trait as factor
+#qtl.keep.all$Trait <- factor(qtl.keep.all$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#qtl.keep.all$Trait <- factor(qtl.keep.all$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+qtl.keep.all$Trait <- factor(qtl.keep.all$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+
+# 8) Saving data frames in binary format
+qtl.keep.all_LR <- qtl.keep.all
+save(qtl.keep.all_LR, file = paste(path, data_frames_summarize, "qtl.keep.all_LR.RData", sep = ""))
+write.table(qtl.keep.all_LR, paste(path, data_frames_summarize, "qtl.keep.all_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+rm(qtl.keep.all_LR)
+
+# Getting the scatter plot
+ad.scatter = ggplot(qtl.keep.all, aes(x = a_effect, y = d_effect)) + 
+  geom_point(aes(colour = Trait)) +
+  #ggtitle("LR rare allele QTL A vs D effects genome distribution \nfor Vegetative/Flowering Time Traits") +
+  #ggtitle("LR rare allele QTL A vs D effects genome distribution \nfor Environmental Response Traits") +
+  ggtitle("LR rare allele QTL A vs D effects genome distribution \nfor Reproductive Traits") +
+  theme_bw()
+
+ad.scatter
+#ggsave(ad.scatter, filename = paste0(path.graph, "LR effects genome dist Veg-Flo.png"), width = 11, height = 8)
+#ggsave(ad.scatter, filename = paste0(path.graph, "LR effects genome dist Env_Res.png"), width = 11, height = 8)
+ggsave(ad.scatter, filename = paste0(path.graph, "LR effects genome dist Reprod.png"), width = 11, height = 8)
+```
+
+It's hard to see trends without scaling
+```{r}
+adt.scatter = ggplot(qtl.keep.all, aes(x = a_tval, y = d_tval)) + 
+  geom_point(aes(colour = Trait))+
+  ylab("Scaled dominance effect") +
+  xlab("Scaled additive effect") +
+  #ggtitle("Scaled dominance vs additive effects landrace Vegetative/Flowering Time Traits") +
+  #ggtitle("Scaled dominance vs additive effects landrace Environmental Response Traits") +
+  ggtitle("Scaled dominance vs additive effects landrace Reproductive Traits") +
+  theme_bw()
+
+adt.scatter
+#ggsave(adt.scatter, filename = paste0(path.graph, "Scatterplot scaled a d effects LR Veg-Flo.png"), width = 11, height = 8)
+#ggsave(adt.scatter, filename = paste0(path.graph, "Scatterplot scaled a d effects LR Env_Res.png"), width = 11, height = 8)
+ggsave(adt.scatter, filename = paste0(path.graph, "Scatterplot scaled a d effects LR Reprod.png"), width = 11, height = 8)
+
+```
+
+Summarize the cumulative variation associated with rare QTL for each trait
+```{r}
+QTL.summary = qtl.keep.all %>% filter(marker == 'All markers')
+QTL.summary2 = read.csv(paste0(path, "LR_rare_QTL_summaries.csv"))
+
+
+QTL.summary3 = merge(QTL.summary, QTL.summary2)
+QTL.summary3 = select(QTL.summary3, Trait, r2_A, r2_D, r2_AD, R2_PC_model, QTL_in_final_mod, R2_w_QTL) %>% # now "R2_PC_model" replace the column "R2_No_QTL"
+  rename(`Add QTL` = r2_A, `Dom QTL` = r2_D, `A+D QTL` = r2_AD, Parentage = R2_PC_model, `Full Model` = R2_w_QTL) %>%
+  gather(key = Model, value = R2, -Trait, -QTL_in_final_mod)
+```
+
+Need to get the levels of Model in the right order for plotting
+```{r}
+QTL.summary3 = mutate(QTL.summary3, Model = fct_relevel(Model, 'Full Model', 'Parentage', 'A+D QTL', 'Add QTL', 'Dom QTL'))
+
+#converting trait as factor
+#QTL.summary3$Trait <- factor(QTL.summary3$Trait, levels = c("DTA", "DTS", "PLHT", "LFLN", "LFWD"))
+#QTL.summary3$Trait <- factor(QTL.summary3$Trait, levels = c('TILN', 'PROL', 'LBNN', 'LBLN', 'LBIL'))
+QTL.summary3$Trait <- factor(QTL.summary3$Trait, levels = c('EL', 'CUPR', 'ED', 'GE', 'EILN', 'TGPP', 'TGWP', 'GW'))
+
+# 9) Saving data frames in binary format
+QTL.summary3_LR <- QTL.summary3
+save(QTL.summary3_LR, file = paste(path, data_frames_summarize, "QTL.summary3_LR.RData", sep = ""))
+write.table(QTL.summary3_LR, paste(path, data_frames_summarize, "QTL.summary3_LR.txt", sep = ""), row.names = F, quote = F, sep = "\t")
+rm(QTL.summary3_LR)
+```
+
+Make a faceted bar graph
+```{r}
+QTL.summary.bar = ggplot(QTL.summary3, aes(x = Model, y = R2)) +
+  geom_bar(stat = 'identity', aes(fill = Trait), width = 0.5, position = position_dodge(width = 1)) +
+  facet_grid(facets = Trait ~ .) +
+  geom_text(aes(x = 'Add QTL', y = 0.4, label = paste(QTL_in_final_mod, "QTL")), size = 3) +
+  scale_y_continuous(breaks=c(0.25, 0.5)) +
+  guides(fill = FALSE) +
+  xlab("Model Component") +
+  ylab(expression(R^{2})) +
+  #ggtitle("Variation due to rare QTL in landrace \nVegetative/Flowering Time Traits") +
+  #ggtitle("Variation due to rare QTL in landrace Environmental Response Traits") +
+  ggtitle("Variation due to rare QTL in landrace Reproductive Traits") +
+  theme_bw() +
+  theme(#panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_rect(size = 0.2, colour = "black"), 
+        strip.text.y = element_text(size = 6), 
+        plot.title = element_text(size = 10),
+        aspect.ratio=1/3,
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        panel.spacing.x=unit(0, "lines"),panel.spacing.y=unit(0, "lines")
+        )
+
+QTL.summary.bar
+#ggsave(QTL.summary.bar, filename = paste0(path.graph, "QTL variation bar graph LR Veg-Flo.png"), width = 11, height = 8)
+#ggsave(QTL.summary.bar, filename = paste0(path.graph, "QTL variation bar graph LR Env Res.png"), width = 11, height = 8)
+ggsave(QTL.summary.bar, filename = paste0(path.graph, "QTL variation bar graph LR Reprod.png"), width = 11, height = 8)
+```
+
